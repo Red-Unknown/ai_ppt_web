@@ -1,0 +1,43 @@
+# General
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+
+# Backend
+backend/app/__pycache__/
+*.log
+*.sqlite
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Sandbox (User specific)
+sandbox/*
+!sandbox/.keep
+
+# Data & Fixtures (Large files)
+fixtures/archive/
+data/
