@@ -96,7 +96,51 @@
 }
 ```
 
-### 2.3 学生画像接口
+### 2.4 实时流式接口 (Real-time Streaming)
+
+提供 WebSocket 和 SSE 两种方式，支持打字机效果、多模态推送、实时反馈及边缘安全过滤。
+
+#### 2.4.1 WebSocket 接口
+
+**URL**: `ws://<host>/api/v1/chat/ws`
+
+**请求消息格式**:
+```json
+{
+  "query": "什么是牛顿第二定律？",
+  "session_id": "sess_123",
+  "current_path": "mechanics"
+}
+```
+
+**响应消息流 (JSON Sequence)**:
+
+1.  **开始/意图确认**: `{"type": "start", "action": "QA_ANSWER"}`
+2.  **多模态预加载 (Multimedia)**: `{"type": "multimedia", "data": {"type": "image", "url": "..."}}`
+3.  **文本片段 (Stream)**: `{"type": "token", "content": "牛"}` -> `{"type": "token", "content": "顿"}` ...
+4.  **性能指标 (Visual Feedback)**: `{"type": "metrics", "data": {"speed": "45.2 chars/s", "total_time": "1.2s", "token_count": 50}}`
+5.  **智能追问 (Suggestions)**: `{"type": "suggestions", "content": ["公式是什么?", "适用范围?", "生活实例?"]}`
+6.  **结束**: `{"type": "end"}`
+
+**异常处理 (Mock Edge Filter)**:
+若检测到恶意内容 (如 "sql injection", "<script>"), 返回:
+`{"type": "error", "content": "Edge Security: Malicious content detected."}`
+
+#### 2.4.2 SSE 接口 (Server-Sent Events)
+
+**URL**: `GET /api/v1/chat/sse?query=...&session_id=...&current_path=...`
+
+**响应格式**: `text/event-stream`
+每行以 `data: ` 开头，内容为上述 JSON 结构。例如：
+```
+data: {"type": "start", "action": "QA_ANSWER"}
+
+data: {"type": "token", "content": "牛"}
+
+...
+```
+
+## 3. 错误码
 
 **GET** `/api/v1/student/profile`
 **POST** `/api/v1/student/profile`
