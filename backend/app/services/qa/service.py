@@ -4,11 +4,12 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 from langchain_openai import ChatOpenAI
 
-from backend.app.schemas.qa import ChatRequest, ChatResponse, SourceNode, Intent
+from backend.app.schemas.qa import ChatRequest, ChatResponse, SourceNode, Intent, AdaptScriptRequest, AdaptScriptResponse
 from backend.app.services.qa.retriever import TreeStructureRetriever
 from backend.app.services.qa.router import DialogueRouter
 from backend.app.services.teacher.agent import TeacherAgent
 from backend.app.services.student.state_manager import StudentStateManager
+import time
 
 class QAService:
     def __init__(self, llm_model: str = "gpt-3.5-turbo"):
@@ -29,6 +30,32 @@ class QAService:
             
             Student Question: {question}
             """
+        )
+
+    async def adapt_script(self, request: AdaptScriptRequest, user_id: str = "student_001") -> AdaptScriptResponse:
+        """
+        Adapt the next script segment based on student profile and learning style.
+        """
+        start_time = time.time()
+        
+        # 1. Get Profile
+        profile = StudentStateManager.get_profile(user_id)
+        if not profile:
+            profile = StudentStateManager.create_or_update_profile(user_id, {})
+            
+        # 2. Call Teacher Agent
+        adapted_text = await self.teacher.adapt_next_segment(
+            original_script=request.original_script,
+            profile=profile,
+            force_adapt=True
+        )
+        
+        processing_time = time.time() - start_time
+        
+        return AdaptScriptResponse(
+            adapted_script=adapted_text,
+            style_applied=profile.learning_style or "standard",
+            processing_time=processing_time
         )
 
     async def answer_question(self, request: ChatRequest, user_id: str = "student_001") -> ChatResponse:

@@ -27,3 +27,13 @@ class ChatResponse(BaseModel):
     session_id: Optional[str] = None
     action: Optional[str] = Field(None, description="Action for the client: RESUME, SUPPLEMENT, FALLBACK_VIDEO")
     action_data: Optional[Dict[str, Any]] = Field(None, description="Data for the action, e.g., video_url")
+
+class AdaptScriptRequest(BaseModel):
+    original_script: str = Field(..., description="The original script text")
+    session_id: str = Field(..., description="The session ID to get student profile context")
+    target_style: Optional[str] = Field(None, description="Optional target style override")
+
+class AdaptScriptResponse(BaseModel):
+    adapted_script: str
+    style_applied: str
+    processing_time: float

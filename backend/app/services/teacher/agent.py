@@ -95,19 +95,23 @@ class TeacherAgent:
     async def adapt_next_segment(
         self, 
         original_script: str, 
-        profile: StudentProfile
+        profile: StudentProfile,
+        force_adapt: bool = False
     ) -> str:
         """
-        Rewrite the next script segment if in PERSONALIZED mode.
+        Rewrite the next script segment if in PERSONALIZED mode or forced.
         """
-        if profile.interaction_mode == InteractionMode.STANDARD:
+        if not force_adapt and profile.interaction_mode == InteractionMode.STANDARD:
             return original_script
             
         try:
+            # Check if learning style is set, otherwise default to standard/visual
+            style = profile.learning_style or "visual"
+            
             chain = self.adaptation_prompt | self.llm | StrOutputParser()
             rewritten = await chain.ainvoke({
                 "weaknesses": ", ".join(profile.weaknesses),
-                "learning_style": profile.learning_style,
+                "learning_style": style,
                 "original_script": original_script
             })
             return rewritten
