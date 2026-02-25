@@ -18,6 +18,7 @@ venv.bak/
 # IDE
 .vscode/
 .idea/
+.trae/
 
 # Backend
 backend/app/__pycache__/
@@ -48,3 +49,4 @@ data/
 赛题信息/
 团队信息/
 选题阶段（结束）/
+
