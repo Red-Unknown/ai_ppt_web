@@ -18,6 +18,7 @@ venv.bak/
 # IDE
 .vscode/
 .idea/
+.trae/
 
 # Backend
 backend/app/__pycache__/
@@ -41,3 +42,10 @@ sandbox/*
 # Data & Fixtures (Large files)
 fixtures/archive/
 data/
+
+# 项目相关
+材料/
+会议纪要/
+赛题信息/
+团队信息/
+选题阶段（结束）/
