@@ -17,7 +17,7 @@ if not exist environment.yml (
 )
 
 REM Create or Update Environment
-echo [INFO] Creating/Updating Conda environment 'fwwb_a12_env'...
+echo [INFO] Creating/Updating Conda environment 'ai_ppt_web'...
 call conda env update -f environment.yml --prune
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to update environment.
@@ -25,5 +25,5 @@ if %errorlevel% neq 0 (
 )
 
 echo [INFO] Environment bootstrap completed successfully.
-echo [INFO] Activate with: conda activate fwwb_a12_env
+echo [INFO] Activate with: conda activate ai_ppt_web
 endlocal

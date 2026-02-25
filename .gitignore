@@ -14,6 +14,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.conda_pkgs/
 
 # IDE
 .vscode/
@@ -43,9 +44,10 @@ sandbox/*
 fixtures/archive/
 data/
 
-# 项目相关
+# Project Materials (Large files)
 材料/
 会议纪要/
 赛题信息/
 团队信息/
 选题阶段（结束）/
+

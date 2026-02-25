@@ -1,4 +1,4 @@
-name: fwwb_a12_env
+name: ai_ppt_web
 channels:
   - conda-forge
   - defaults
@@ -34,6 +34,7 @@ dependencies:
     # AI & Data Processing (Initial Set)
     - langchain==0.1.0
     - langchain-community==0.0.10
+    - langchain-openai==0.0.5
     - openai==1.10.0
     - tiktoken==0.5.2
     - python-pptx==0.6.23
