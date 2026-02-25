@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, AsyncGenerator
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
@@ -10,14 +10,23 @@ from backend.app.services.qa.router import DialogueRouter
 from backend.app.services.teacher.agent import TeacherAgent
 from backend.app.services.student.state_manager import StudentStateManager
 import time
+import json
+import asyncio
 
 class QAService:
     def __init__(self, llm_model: str = "gpt-3.5-turbo"):
         # Initialize LLM (Mock for now or use Env Var)
-        self.llm = ChatOpenAI(model=llm_model, temperature=0.3)
+        self.llm = ChatOpenAI(model=llm_model, temperature=0.3, streaming=True)
         self.retriever = TreeStructureRetriever()
         self.router = DialogueRouter(llm_model=llm_model)
         self.teacher = TeacherAgent(llm_model=llm_model)
+        
+        # Simple Intent Cache (In-Memory)
+        self.intent_cache = {
+            "课程介绍": "本课程是《大学物理》，主要涵盖力学、热学、电磁学等基础内容。",
+            "评分标准": "平时成绩占 40%（含作业、签到、互动），期末考试占 60%。",
+            "老师是谁": "我是您的 AI 助教，由 Role D 模块驱动。"
+        }
         
         # Define Prompt Template for QA
         self.qa_prompt = ChatPromptTemplate.from_template(
@@ -31,6 +40,158 @@ class QAService:
             Student Question: {question}
             """
         )
+
+    async def predict_next_questions(self, query: str) -> List[str]:
+        """
+        Intelligent Prediction: Predict next 3 likely questions.
+        This enables pre-fetching and reduces First Token Time for follow-up queries.
+        """
+        # Mock logic based on keywords
+        if "Newton" in query or "Law" in query:
+            return ["What is the First Law?", "What is the Third Law?", "Real-world examples?"]
+        elif "课程" in query:
+            return ["如何考核?", "教材是什么?", "联系方式?"]
+        else:
+            return [f"More details about {query}?", "Examples?", "Related concepts?"]
+
+    async def stream_answer_question(self, request: ChatRequest, user_id: str = "student_001") -> AsyncGenerator[str, None]:
+        """
+        Stream response for WebSocket using Server-Sent Events style JSON chunks.
+        """
+        # 1. Intent Cache Hit (Zero Latency)
+        if request.query in self.intent_cache:
+            yield json.dumps({"type": "start", "action": "QA_CACHE"})
+            yield json.dumps({"type": "token", "content": self.intent_cache[request.query]})
+            
+            # Intelligent Prediction for Cache Hit
+            suggestions = await self.predict_next_questions(request.query)
+            yield json.dumps({"type": "suggestions", "content": suggestions})
+            
+            yield json.dumps({"type": "end"})
+            return
+
+        # 2. Get/Init Student Profile & State
+        profile = StudentStateManager.get_profile(user_id)
+        if not profile:
+            profile = StudentStateManager.create_or_update_profile(user_id, {})
+            
+        session_id = request.session_id or "default_session"
+        state = StudentStateManager.get_state(session_id)
+        if not state:
+            state = StudentStateManager.init_state(session_id, request.current_path or "unknown_topic")
+
+        # 3. Route Intent
+        intent = self.router.route(request.query)
+        
+        if intent == Intent.CONTROL:
+            yield json.dumps({"type": "start", "action": "CONTROL"})
+            yield json.dumps({"type": "token", "content": "执行控制指令: " + request.query})
+            yield json.dumps({"type": "action", "data": {"command": request.query}})
+            yield json.dumps({"type": "end"})
+            return
+
+        elif intent == Intent.FEEDBACK:
+            # Retrieve context first
+            self.retriever.current_path = request.current_path
+            docs = self.retriever.invoke(request.query)
+            context_str = "\n".join([d.page_content[:200] for d in docs])
+            
+            # Send processing status
+            yield json.dumps({"type": "status", "content": "正在分析反馈..."})
+            
+            feedback_result = await self.teacher.handle_feedback(
+                request.query, state, profile, context_str
+            )
+            
+            # Update confusion
+            if feedback_result.get("action") in ["SUPPLEMENT", "FALLBACK_VIDEO"]:
+                StudentStateManager.increment_confusion(session_id)
+            else:
+                StudentStateManager.reset_confusion(session_id)
+
+            yield json.dumps({"type": "start", "action": feedback_result.get("action")})
+            
+            # If fallback video, send action data immediately
+            if feedback_result.get("action") == "FALLBACK_VIDEO":
+                yield json.dumps({"type": "action", "data": feedback_result})
+                yield json.dumps({"type": "token", "content": feedback_result.get("message")})
+            else:
+                # Simulate streaming for supplement text (since teacher agent returns full text currently)
+                # In a real implementation, teacher agent should also support streaming.
+                content = feedback_result.get("message") or feedback_result.get("content", "")
+                chunk_size = 5
+                for i in range(0, len(content), chunk_size):
+                    yield json.dumps({"type": "token", "content": content[i:i+chunk_size]})
+                    await asyncio.sleep(0.02) # Simulate typing effect
+                    
+                if "audio_text" in feedback_result:
+                     yield json.dumps({"type": "action", "data": {"audio_text": feedback_result["audio_text"]}})
+
+            yield json.dumps({"type": "end"})
+            return
+
+        else: # Intent.QA
+            yield json.dumps({"type": "status", "content": "正在检索知识库..."})
+            
+            StudentStateManager.reset_confusion(session_id)
+            
+            # 1. Update retriever context
+            self.retriever.current_path = request.current_path
+            self.retriever.top_k = request.top_k
+            
+            # 2. Retrieve documents
+            docs = self.retriever.invoke(request.query)
+            context_str = "\n\n".join([d.page_content for d in docs])
+            
+            # Send Source Nodes (Multimedia Pre-loading if any)
+            sources = []
+            for doc in docs:
+                source = {
+                    "node_id": doc.metadata.get("id", "unknown"),
+                    "content": doc.page_content[:50] + "...",
+                    "relevance": doc.metadata.get("score", 0.0)
+                }
+                sources.append(source)
+                # Mock Multimedia Push
+                if "image" in doc.page_content.lower():
+                     yield json.dumps({"type": "multimedia", "data": {"type": "image", "url": "http://mock.img/1.png"}})
+            
+            yield json.dumps({"type": "sources", "data": sources})
+            yield json.dumps({"type": "start", "action": "QA_ANSWER"})
+
+            # 3. Generate Answer (Streaming)
+            chain = self.qa_prompt | self.llm | StrOutputParser()
+            chain_input = {"context": context_str, "question": request.query}
+            
+            start_time = time.time()
+            token_count = 0
+            
+            try:
+                async for chunk in chain.astream(chain_input):
+                    token_count += len(chunk)
+                    yield json.dumps({"type": "token", "content": chunk})
+                    
+                    # Optional: Emit interim speed every N tokens if needed, but for now just at end or rely on frontend
+                    
+            except Exception as e:
+                yield json.dumps({"type": "error", "content": str(e)})
+            
+            total_time = time.time() - start_time
+            speed = token_count / total_time if total_time > 0 else 0
+            yield json.dumps({
+                "type": "metrics", 
+                "data": {
+                    "speed": f"{speed:.2f} chars/s",
+                    "total_time": f"{total_time:.2f} s",
+                    "token_count": token_count
+                }
+            })
+            
+            # Intelligent Prediction
+            suggestions = await self.predict_next_questions(request.query)
+            yield json.dumps({"type": "suggestions", "content": suggestions})
+                
+            yield json.dumps({"type": "end"})
 
     async def adapt_script(self, request: AdaptScriptRequest, user_id: str = "student_001") -> AdaptScriptResponse:
         """
