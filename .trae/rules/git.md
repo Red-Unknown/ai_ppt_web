@@ -1,6 +1,5 @@
 ---
-alwaysApply: false
-description: 需要执行git操作时
+alwaysApply: true
 ---
 ## 3. Git 拉取与提交规范 (Git Workflow)
 

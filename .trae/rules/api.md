@@ -1,6 +1,5 @@
 ---
-alwaysApply: false
-description: 涉及API 与接口设计规范
+alwaysApply: true
 ---
 ## 7. API 与接口设计规范 (API Design)
 

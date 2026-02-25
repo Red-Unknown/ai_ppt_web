@@ -41,3 +41,10 @@ sandbox/*
 # Data & Fixtures (Large files)
 fixtures/archive/
 data/
+
+# Project Materials (Large files)
+材料/
+会议纪要/
+赛题信息/
+团队信息/
+选题阶段（结束）/
