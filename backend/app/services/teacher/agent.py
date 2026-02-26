@@ -3,6 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from backend.app.schemas.student import StudentProfile, StudentState, InteractionMode
+from backend.app.core.config import settings
 
 class TeacherAgent:
     """
@@ -13,7 +14,12 @@ class TeacherAgent:
     """
 
     def __init__(self, llm_model: str = "gpt-4o"):
-        self.llm = ChatOpenAI(model=llm_model, temperature=0.7)
+        self.llm = ChatOpenAI(
+            model=llm_model, 
+            temperature=0.7,
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url=settings.DEEPSEEK_BASE_URL
+        )
         
         # Prompt for Supplementary Explanation
         self.supplement_prompt = ChatPromptTemplate.from_template(
@@ -92,6 +98,21 @@ class TeacherAgent:
         
         return {"action": "RESUME", "message": "好的，我们继续。"}
 
+    async def _generate_supplement(self, topic: str, profile: StudentProfile, context_content: str) -> str:
+        """
+        Generate supplementary explanation using LLM.
+        """
+        chain = self.supplement_prompt | self.llm | StrOutputParser()
+        try:
+            return await chain.ainvoke({
+                "topic": topic,
+                "weaknesses": ",".join(profile.weaknesses),
+                "learning_style": profile.learning_style,
+                "context_content": context_content
+            })
+        except Exception as e:
+            return f"Error generating explanation: {e}"
+
     async def adapt_next_segment(
         self, 
         original_script: str, 
@@ -99,36 +120,17 @@ class TeacherAgent:
         force_adapt: bool = False
     ) -> str:
         """
-        Rewrite the next script segment if in PERSONALIZED mode or forced.
+        Adapt the next script segment using LLM.
         """
-        if not force_adapt and profile.interaction_mode == InteractionMode.STANDARD:
+        if not force_adapt and profile.interaction_mode != InteractionMode.ADAPTIVE:
             return original_script
             
+        chain = self.adaptation_prompt | self.llm | StrOutputParser()
         try:
-            # Check if learning style is set, otherwise default to standard/visual
-            style = profile.learning_style or "visual"
-            
-            chain = self.adaptation_prompt | self.llm | StrOutputParser()
-            rewritten = await chain.ainvoke({
-                "weaknesses": ", ".join(profile.weaknesses),
-                "learning_style": style,
+            return await chain.ainvoke({
+                "weaknesses": ",".join(profile.weaknesses),
+                "learning_style": profile.learning_style,
                 "original_script": original_script
             })
-            return rewritten
         except Exception as e:
-            print(f"Adaptation failed: {e}")
             return original_script
-
-    async def _generate_supplement(
-        self, 
-        topic: str, 
-        profile: StudentProfile, 
-        context_content: str
-    ) -> str:
-        chain = self.supplement_prompt | self.llm | StrOutputParser()
-        return await chain.ainvoke({
-            "topic": topic,
-            "weaknesses": ", ".join(profile.weaknesses),
-            "learning_style": profile.learning_style,
-            "context_content": context_content
-        })

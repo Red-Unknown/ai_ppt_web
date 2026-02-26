@@ -1,0 +1,59 @@
+[
+  {
+    "course_id": "phys101_xzh",
+    "title": "大学物理（Mock）",
+    "description": "基础物理课程，涵盖力学、热学、电磁学。",
+    "chapters": [
+      {
+        "id": "c1",
+        "title": "力学",
+        "sections": [
+          {
+            "id": "s1",
+            "title": "牛顿定律",
+            "content": "牛顿三大定律是经典力学的基石。"
+          },
+          {
+            "id": "s2",
+            "title": "功与能",
+            "content": "能量守恒定律是自然界普遍规律。"
+          }
+        ]
+      },
+      {
+        "id": "c2",
+        "title": "电磁学",
+        "sections": [
+          {
+            "id": "s3",
+            "title": "静电场",
+            "content": "库仑定律描述电荷间的作用力。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "course_id": "cs101_xzh",
+    "title": "计算机科学导论（Mock）",
+    "description": "计算机科学基础，包括算法、数据结构、网络。",
+    "chapters": [
+      {
+        "id": "c3",
+        "title": "算法基础",
+        "sections": [
+          {
+            "id": "s4",
+            "title": "排序算法",
+            "content": "快速排序的时间复杂度为O(nlogn)。"
+          },
+          {
+            "id": "s5",
+            "title": "查找算法",
+            "content": "二分查找适用于有序数组。"
+          }
+        ]
+      }
+    ]
+  }
+]

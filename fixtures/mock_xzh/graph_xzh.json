@@ -1,0 +1,46 @@
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "path": "力学/牛顿定律/二定律",
+      "content": "F=ma 描述合外力与加速度的关系。",
+      "score": 0.95,
+      "type": "concept"
+    },
+    {
+      "id": "n2",
+      "path": "力学/能量/功与能",
+      "content": "功是能量转化的量度。",
+      "score": 0.88,
+      "type": "concept"
+    },
+    {
+      "id": "n3",
+      "path": "计算机/算法/排序",
+      "content": "快速排序是一种高效的排序算法。",
+      "score": 0.9,
+      "type": "concept"
+    },
+    {
+      "id": "n4",
+      "path": "计算机/算法/复杂度",
+      "content": "时间复杂度衡量算法执行效率。",
+      "score": 0.85,
+      "type": "concept"
+    }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n2",
+      "type": "relates_to",
+      "weight": 0.7
+    },
+    {
+      "from": "n3",
+      "to": "n4",
+      "type": "depends_on",
+      "weight": 0.9
+    }
+  ]
+}

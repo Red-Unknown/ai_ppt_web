@@ -1,0 +1,16 @@
+[
+  {
+    "question": "牛顿第二定律的内容是什么？",
+    "answer": "F=ma，描述合外力与加速度成正比。",
+    "related_nodes": [
+      "n1"
+    ]
+  },
+  {
+    "question": "快速排序的时间复杂度是多少？",
+    "answer": "平均情况下为O(nlogn)。",
+    "related_nodes": [
+      "n3"
+    ]
+  }
+]

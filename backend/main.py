@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
-from app.api.v1 import chat, student
+from backend.app.core.config import settings
+from backend.app.api.v1 import chat, student
 
 def get_application() -> FastAPI:
     application = FastAPI(
@@ -43,4 +43,4 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
