@@ -3,7 +3,7 @@ from typing import Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
-
+from backend.app.core.config import settings
 from backend.app.schemas.qa import Intent
 
 class DialogueRouter:
@@ -13,7 +13,13 @@ class DialogueRouter:
     """
 
     def __init__(self, llm_model: str = "gpt-3.5-turbo"):
-        self.llm = ChatOpenAI(model=llm_model, temperature=0)
+        # Use DeepSeek settings if available, otherwise fallback to defaults (which might fail if no key)
+        self.llm = ChatOpenAI(
+            model=llm_model, 
+            temperature=0,
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url=settings.DEEPSEEK_BASE_URL
+        )
         
         # Regex Patterns
         self.control_patterns = [
