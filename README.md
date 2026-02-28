@@ -30,7 +30,7 @@
 3. 激活环境：
 
    ```bash
-   conda activate fwwb_a12_env
+   conda activate ai_ppt_web
    ```
 
 如需调整依赖，请严格按照 `TEAM_GUIDELINES.md` 中的环境变更流程进行，并在提交时同步更新 `environment.yml`。
