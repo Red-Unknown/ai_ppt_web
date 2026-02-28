@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     
     ALLOWED_HOSTS: List[str] = ["*"]
     
+    # Logging Configuration
+    DEBUG: bool = False
+    LOG_LEVEL: str = "INFO"
+    LOG_FILE_MAX_SIZE: int = 10  # MB
+    LOG_BACKUP_COUNT: int = 5
+    
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/fwwb_a12"
     

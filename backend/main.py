@@ -2,8 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.core.config import settings
 from backend.app.api.v1 import chat, student
+from backend.app.core.logging_config import setup_logging
 
 def get_application() -> FastAPI:
+    # 初始化日志系统
+    setup_logging()
+    
     application = FastAPI(
         title=settings.PROJECT_NAME,
         version=settings.PROJECT_VERSION,

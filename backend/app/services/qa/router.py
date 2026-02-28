@@ -57,18 +57,28 @@ class DialogueRouter:
         return self._route_llm(query)
 
     def _route_regex(self, query: str) -> Optional[Intent]:
-        for pattern in self.control_patterns:
-            if re.search(pattern, query):
-                return Intent.CONTROL
+        # Clean query
+        q = query.strip()
         
+        # QA Patterns (Priority High for Questions)
+        qa_keywords = ["什么", "为什么", "怎么", "解释", "含义", "意思", "who", "what", "why", "how"]
+        if any(k in q for k in qa_keywords) or "?" in q or "？" in q:
+            # Even if it contains "暂停", "为什么暂停" is a QA.
+            # Unless it is exactly "为什么要暂停？" which is ambiguous but usually QA.
+            return Intent.QA
+
+        # Control Patterns (Strict Matching)
+        # Only match if the query is short and looks like a command
+        if len(q) < 10:
+            for pattern in self.control_patterns:
+                if re.search(pattern, q):
+                    return Intent.CONTROL
+        
+        # Feedback Patterns
         for pattern in self.feedback_patterns:
-            if re.search(pattern, query):
+            if re.search(pattern, q):
                 return Intent.FEEDBACK
                 
-        # Simple heuristic for QA if it looks like a question
-        if "?" in query or "什么" in query or "为什么" in query or "怎么" in query:
-             return Intent.QA
-             
         return None
 
     def _route_llm(self, query: str) -> Intent:

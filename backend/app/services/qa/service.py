@@ -40,7 +40,7 @@ class QAService:
         self.teacher = TeacherAgent(llm_model=settings.DEEPSEEK_MODEL)
         
         # Current Prompt Version
-        self.current_prompt_version = "default"
+        self.current_prompt_version = "v5_enhanced_zh"
         self._init_llm()
         
         # Simple Intent Cache (In-Memory) - kept for high-speed common queries
@@ -65,6 +65,7 @@ class QAService:
     def _init_llm(self):
         """Initialize LLM clients with current settings."""
         self.llm_clients = {}
+        # Initialize DeepSeek Clients (Default)
         for scenario, config in self.SCENARIO_CONFIGS.items():
             self.llm_clients[scenario] = ChatOpenAI(
                 model=settings.DEEPSEEK_MODEL,
@@ -75,21 +76,31 @@ class QAService:
                 streaming=True,
                 max_retries=3
             )
+            
+        # Initialize GPT Clients (if available)
+        if settings.OPENAI_API_KEY:
+            for scenario in self.SCENARIO_CONFIGS:
+                self.llm_clients[f"{scenario}_gpt"] = ChatOpenAI(
+                    model="gpt-4o",
+                    api_key=settings.OPENAI_API_KEY,
+                    temperature=self.SCENARIO_CONFIGS[scenario].get("temperature", 0.7),
+                    max_tokens=self.SCENARIO_CONFIGS[scenario].get("max_tokens", 2048),
+                    streaming=True
+                )
+        
         # Default LLM
         self.llm = self.llm_clients["qa"]
 
     def reload_config(self):
         """Hot reload configuration (re-initialize LLMs)."""
         logger.info("Reloading QAService configuration...")
-        # In a real scenario, you might re-read settings from disk here if they changed
-        # settings.reload() 
         self._validate_config()
         self._init_llm()
         logger.info("Configuration reloaded.")
 
-    def get_prompt_template(self) -> ChatPromptTemplate:
-        system_text = prompt_loader.get_prompt(self.current_prompt_version, "system")
-        user_text = prompt_loader.get_prompt(self.current_prompt_version, "user")
+    def get_prompt_template(self, version: str = "default") -> ChatPromptTemplate:
+        system_text = prompt_loader.get_prompt(version, "system")
+        user_text = prompt_loader.get_prompt(version, "user")
         if not system_text:
             system_text = (
                 "You are a helpful teaching assistant.\n"
@@ -100,6 +111,14 @@ class QAService:
             )
         if "{question}" not in user_text or "{context}" not in system_text:
             user_text = "Student Question: {question}"
+        
+        # Inject history if available
+        if "{history}" in system_text or "{history}" in user_text:
+            pass 
+        else:
+            # Append history to user text if not present
+            user_text += "\n\nHistory:\n{history}"
+            
         messages = [("system", system_text), ("user", user_text)]
         return ChatPromptTemplate.from_messages(messages)
 
@@ -129,23 +148,10 @@ class QAService:
             yield json.dumps({"type": "end"})
             return
 
-        # 2. Local Disk Cache Hit (Persistent)
-        # We can't cache 'stream' objects easily, so if cache hit, we yield the full text as tokens
-        cached_response = local_cache.get(request.query, {"user_id": user_id, "top_k": request.top_k})
-        if cached_response:
-            yield json.dumps({"type": "start", "action": "DISK_CACHE_HIT"})
-            yield json.dumps({"type": "metrics", "data": local_cache.get_metrics()})
-            
-            # Simulate streaming for cached content
-            chunk_size = 10
-            for i in range(0, len(cached_response), chunk_size):
-                yield json.dumps({"type": "token", "content": cached_response[i:i+chunk_size]})
-                await asyncio.sleep(0.01)
-            
-            suggestions = await self.predict_next_questions(request.query)
-            yield json.dumps({"type": "suggestions", "content": suggestions})
-            yield json.dumps({"type": "end"})
-            return
+        # 2. Local Disk Cache Hit (Persistent) - DISABLED per user request
+        # cached_response = local_cache.get(request.query, {"user_id": user_id, "top_k": request.top_k})
+        # if cached_response:
+        #    ...
 
         # 3. Get/Init Student Profile & State
         profile = StudentStateManager.get_profile(user_id)
@@ -212,7 +218,7 @@ class QAService:
             
             # 2. Retrieve documents
             docs = self.retriever.invoke(request.query)
-            context_str = "\n\n".join([d.page_content for d in docs])
+            context_str = "\n\n".join([f"【来源：{d.metadata.get('path', '未知路径')}】\n内容：{d.page_content}" for d in docs])
             
             # Send Source Nodes
             sources = []
@@ -230,44 +236,76 @@ class QAService:
             yield json.dumps({"type": "start", "action": "QA_ANSWER"})
 
             # 3. Generate Answer (Streaming)
-            # Use 'qa' scenario LLM
-            llm = self.llm_clients["qa"]
-            prompt = self.get_prompt_template()
+            # Determine prompt version and language
+            style_map = {
+                "default": "v5_enhanced",
+                "creative": "v2_creative",
+                "socratic": "v3_socratic"
+            }
+            # Handle prompt style selection
+            base_style = style_map.get(request.prompt_style, "v5_enhanced")
+            
+            # Select LLM and Language
+            if request.model == "gpt-4o":
+                llm_key = "qa_gpt"
+                lang_suffix = "_en"
+                if llm_key not in self.llm_clients:
+                    llm_key = "qa"
+                    lang_suffix = "_zh"
+            else:
+                llm_key = "qa"
+                lang_suffix = "_zh"
+                
+            prompt_version = f"{base_style}{lang_suffix}"
+
+            # Use selected scenario LLM
+            llm = self.llm_clients.get(llm_key, self.llm_clients["qa"])
+            prompt = self.get_prompt_template(prompt_version)
             chain = prompt | llm | StrOutputParser()
-            chain_input = {"context": context_str, "question": request.query}
+            
+            # Retrieve history
+            history_list = StudentStateManager.get_history(session_id, limit=5)
+            history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history_list])
+            
+            # Sandwich Defense
+            final_query = request.query
+            if lang_suffix == "_en":
+                final_query += "\n\n(System Reminder: Please answer in Chinese)"
+            else:
+                final_query += "\n\n(系统提示：请务必使用中文回答)"
+
+            chain_input = {
+                "context": context_str, 
+                "question": final_query,
+                "history": history_str
+            }
             
             start_time = time.time()
-            token_count = 0
-            full_response = ""
+            full_answer = ""
             
+            # Save User Query immediately
+            try:
+                StudentStateManager.add_history(session_id, "user", request.query)
+            except Exception as e:
+                logger.error(f"Failed to save user history: {e}")
+
             try:
                 async for chunk in chain.astream(chain_input):
-                    token_count += len(chunk)
-                    full_response += chunk
+                    full_answer += chunk
                     yield json.dumps({"type": "token", "content": chunk})
-                    
             except Exception as e:
-                yield json.dumps({"type": "error", "content": str(e)})
-                return
+                logger.error(f"Error during LLM streaming: {e}")
+                yield json.dumps({"type": "error", "content": "Sorry, I encountered an error while generating the response."})
+            finally:
+                # Save Assistant Response (Partial or Full)
+                if full_answer:
+                    try:
+                        StudentStateManager.add_history(session_id, "assistant", full_answer)
+                    except Exception as e:
+                        logger.error(f"Failed to save assistant history: {e}")
             
-            # Cache the full response
-            local_cache.set(request.query, {"user_id": user_id, "top_k": request.top_k}, full_response)
-            
-            total_time = time.time() - start_time
-            speed = token_count / total_time if total_time > 0 else 0
-            yield json.dumps({
-                "type": "metrics", 
-                "data": {
-                    "speed": f"{speed:.2f} chars/s",
-                    "total_time": f"{total_time:.2f} s",
-                    "token_count": token_count,
-                    "cache_stats": local_cache.get_metrics()
-                }
-            })
-            
-            suggestions = await self.predict_next_questions(request.query)
-            yield json.dumps({"type": "suggestions", "content": suggestions})
-            yield json.dumps({"type": "end"})
+            # Cache - DISABLED
+            # local_cache.set(...)
 
     async def adapt_script(self, request: AdaptScriptRequest, user_id: str = "student_001") -> AdaptScriptResponse:
         """
@@ -275,8 +313,7 @@ class QAService:
         Uses 'summary' or 'translation' scenario configs if needed, or default.
         """
         # Example: Use summary config for adaptation to be concise
-        llm = self.llm_clients["summary"]
-        # ... implementation ...
+        llm = self.llm_clients.get("summary", self.llm)
         return AdaptScriptResponse(
             script_id="mock_script",
             adapted_content="Mock adapted content based on profile."
