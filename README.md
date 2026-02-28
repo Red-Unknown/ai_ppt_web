@@ -75,7 +75,7 @@ python scripts/start_app.py --mode prod  # 生产模式（无热重载）
 
 **后端服务（FastAPI）**
 ```bash
-conda activate fwwb_a12_env
+conda activate ai_ppt_web
 cd backend
 python main.py
 ```
