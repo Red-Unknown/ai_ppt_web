@@ -13,6 +13,8 @@ class ChatRequest(BaseModel):
     current_path: Optional[str] = Field(None, description="Current learning path, e.g., /chapter1/section2")
     top_k: int = Field(3, description="Number of results to retrieve")
     session_id: Optional[str] = Field(None, description="Session ID for conversation history")
+    model: Optional[str] = Field("deepseek", description="Model to use: deepseek, gpt-4o")
+    prompt_style: Optional[str] = Field("default", description="Prompt style: default, creative, socratic")
 
 class SourceNode(BaseModel):
     node_id: str
@@ -37,3 +39,17 @@ class AdaptScriptResponse(BaseModel):
     adapted_script: str
     style_applied: str
     processing_time: float
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+    sources: Optional[List[Dict[str, Any]]] = None
+    timestamp: Optional[str] = None
+
+class ChatSessionResponse(BaseModel):
+    id: str
+    title: str
+    updated_at: str
+
+class TruncateRequest(BaseModel):
+    index: int

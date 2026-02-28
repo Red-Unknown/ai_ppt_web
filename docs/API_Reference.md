@@ -95,6 +95,8 @@ Server-Sent Events (SSE) 流式传输备选方案。
 
 ### 3.4 会话 (Sessions)
 
+#### 3.4.1 学习会话 (Learning Sessions)
+
 #### POST `/api/v1/chat/session/start`
 开始学习会话。
 
@@ -125,6 +127,70 @@ Server-Sent Events (SSE) 流式传输备选方案。
   "status": "completed", // processing, failed
   "video_url": "http://...",
   "progress": 100
+}
+```
+
+#### 3.4.2 聊天会话管理 (Chat Sessions Management)
+
+用于管理侧边栏的聊天历史记录。
+
+#### GET `/api/v1/chat/sessions`
+获取当前用户的聊天会话列表。
+
+**响应**:
+```json
+[
+  {
+    "id": "chat_12345678",
+    "title": "New Chat",
+    "updated_at": "2023-10-27T10:00:00"
+  }
+]
+```
+
+#### POST `/api/v1/chat/sessions`
+创建一个新的空白聊天会话。
+
+**响应**:
+```json
+{
+  "session_id": "chat_87654321"
+}
+```
+
+#### GET `/api/v1/chat/history/{session_id}`
+获取指定会话的完整聊天历史。
+
+**响应**:
+```json
+[
+  {
+    "role": "user",
+    "content": "Hello",
+    "timestamp": "..."
+  },
+  {
+    "role": "assistant",
+    "content": "Hi there!",
+    "sources": [...]
+  }
+]
+```
+
+#### POST `/api/v1/chat/history/{session_id}/truncate`
+撤回消息（截断历史记录到指定索引）。
+
+**请求**:
+```json
+{
+  "index": 2
+}
+```
+
+**响应**:
+```json
+{
+  "status": "success"
 }
 ```
 

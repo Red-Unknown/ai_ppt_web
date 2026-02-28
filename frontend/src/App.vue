@@ -1,10 +1,16 @@
 <script setup>
-import RoleDPlayground from './components/RoleDPlayground.vue'
+import EnhancedChat from './components/EnhancedChat.vue'
 </script>
 
 <template>
-  <RoleDPlayground />
+  <EnhancedChat />
 </template>
 
-<style scoped>
+<style>
+/* Global Reset/Base */
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
 </style>

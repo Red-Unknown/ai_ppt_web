@@ -5,6 +5,7 @@ __pycache__/
 *.so
 .DS_Store
 Thumbs.db
+cache.db
 
 # Environment
 .env
@@ -50,4 +51,3 @@ data/
 赛题信息/
 团队信息/
 选题阶段（结束）/
-
