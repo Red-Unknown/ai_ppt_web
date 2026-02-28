@@ -39,34 +39,58 @@
 
 ## 启动项目
 
-### 后端服务（FastAPI）
+### 设置 API Key
 
+DeepSeek API Key 是系统运行的必要条件，请按以下方式设置：
+
+**临时设置（当前终端有效）**
+- Windows: `set DEEPSEEK_API_KEY=sk-your-key-here`
+- Linux/MacOS: `export DEEPSEEK_API_KEY=sk-your-key-here`
+
+**永久设置（推荐）**
+- Windows: `setx DEEPSEEK_API_KEY sk-your-key-here`
+- Linux/MacOS: 在 `~/.bashrc` 或 `~/.zshrc` 中添加 `export DEEPSEEK_API_KEY=sk-your-key-here`
+
+设置后需要重新激活环境：`conda activate fwwb_a12_env`
+
+### 一键启动前后端联调
+
+使用启动脚本自动检查依赖并启动服务：
+
+```bash
+# 在项目根目录执行
+python scripts/start_app.py
+```
+
+或指定运行模式：
+```bash
+python scripts/start_app.py --mode prod  # 生产模式（无热重载）
+```
+
+启动成功后访问：
+- 前端界面：`http://localhost:5173`
+- API 文档：`http://localhost:8000/docs`
+
+### 手动分别启动
+
+**后端服务（FastAPI）**
 ```bash
 conda activate fwwb_a12_env
 cd backend
 python main.py
 ```
 
-启动成功后，可在浏览器中访问：
-
-- OpenAPI 文档：`http://localhost:8000/docs`
-
-### 前端界面（Vue 3 + Vite）
-
+**前端界面（Vue 3 + Vite）**
 首次需要安装依赖：
-
 ```bash
 cd frontend
 npm install
 ```
 
-之后启动开发服务器：
-
+启动开发服务器：
 ```bash
 npm run dev
 ```
-
-默认访问地址为：`http://localhost:5173`
 
 ---
 
