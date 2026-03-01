@@ -20,9 +20,9 @@ class TreeStructureRetriever(BaseRetriever):
     def _load_knowledge_base(self) -> List[Dict]:
         """Load knowledge base from JSON file."""
         try:
-            # backend/app/services/qa/retriever.py -> backend/app/core/knowledge_base.json
-            # parent=qa, parent.parent=services, parent.parent.parent=app
-            kb_path = Path(__file__).resolve().parent.parent.parent / "core" / "knowledge_base.json"
+            # backend/app/services/qa/retrieval/tree_retriever.py -> backend/app/core/knowledge_base.json
+            # parent=retrieval, parent.parent=qa, parent.parent.parent=services, parent.parent.parent.parent=app
+            kb_path = Path(__file__).resolve().parent.parent.parent.parent / "core" / "knowledge_base.json"
             
             if not kb_path.exists():
                 print(f"Knowledge base not found at: {kb_path}")

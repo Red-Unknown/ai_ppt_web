@@ -171,33 +171,48 @@
                 
                 <!-- Details (Collapsible) -->
                 <div v-if="skill.expanded" class="px-3 py-2 border-t border-blue-100 bg-white text-xs font-mono overflow-x-auto max-h-60 custom-scrollbar animate-in slide-in-from-top-1">
+                   <!-- Inputs -->
+                   <div v-if="skill.inputs" class="mb-3">
+                      <div class="text-gray-400 mb-1 select-none flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                        Inputs
+                      </div>
+                      <pre class="bg-gray-50 p-2 rounded text-gray-700 border border-gray-100">{{ JSON.stringify(skill.inputs, null, 2) }}</pre>
+                   </div>
+                   
                    <div v-if="skill.details">
-                       <div v-if="skill.details.code" class="mb-3">
-                         <div class="text-gray-400 mb-1 select-none flex items-center gap-1">
-                           <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                           Generated Code
-                         </div>
-                         <pre class="bg-gray-50 p-2 rounded text-gray-700 border border-gray-100">{{ skill.details.code }}</pre>
-                       </div>
-                       <div v-if="skill.details.execution_result" class="mb-1">
+                       <!-- Success Output -->
+                       <div v-if="skill.status === 'success'" class="mb-1">
                          <div class="text-gray-400 mb-1 select-none flex items-center gap-1">
                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
                            Result
                          </div>
-                         <pre class="text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-100">{{ skill.details.execution_result }}</pre>
+                         <!-- Render based on type -->
+                         <div v-if="skill.details.render_type === 'json'">
+                            <pre class="text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-100">{{ skill.details.output }}</pre>
+                         </div>
+                         <div v-else-if="skill.details.render_type === 'markdown'">
+                            <div class="prose prose-sm max-w-none text-emerald-900 bg-emerald-50/50 p-2 rounded" v-html="skill.details.output"></div>
+                         </div>
+                         <div v-else>
+                            <pre class="text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-100 whitespace-pre-wrap">{{ skill.details.output }}</pre>
+                         </div>
                        </div>
-                       <div v-if="skill.details.type === 'web_search_results'">
-                          <div v-for="(item, i) in skill.details.sources" :key="i" class="mb-3 last:mb-0 p-2 hover:bg-gray-50 rounded transition-colors border border-transparent hover:border-gray-100">
-                             <a :href="item.link" target="_blank" class="text-blue-600 hover:underline font-bold block truncate text-sm mb-1 flex items-center gap-1">
-                               {{ item.title }}
-                               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 opacity-50" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" /><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" /></svg>
-                             </a>
-                             <p class="text-gray-600 leading-snug">{{ item.snippet }}</p>
+                       
+                       <!-- Error Output -->
+                       <div v-else-if="skill.status === 'error'" class="mb-1">
+                          <div class="text-red-400 mb-1 select-none flex items-center gap-1">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                             Error
+                          </div>
+                          <div class="text-red-700 bg-red-50 p-2 rounded border border-red-100">
+                             <div class="font-bold">{{ skill.details.error_message }}</div>
+                             <div class="text-xs mt-1 opacity-75">{{ skill.details.error_details }}</div>
                           </div>
                        </div>
                    </div>
                    <div v-else class="text-gray-400 italic py-2 text-center">
-                     Waiting for details...
+                     Running...
                    </div>
                 </div>
               </div>
@@ -794,27 +809,43 @@ function handleWSMessage(data) {
     case 'sources':
       currentMsg.sources = data.data
       break
-    case 'skill_start':
+    case 'tool_start':
       if (!currentMsg.skills) currentMsg.skills = []
       currentMsg.skills.push({
-        name: data.skill,
-        description: data.description,
+        id: data.tool_call_id,
+        name: data.tool_name,
+        description: data.description || `Calling ${data.tool_name}...`,
+        inputs: data.inputs,
         status: 'running',
         details: null,
-        expanded: true // Auto-expand when starting to show progress
+        expanded: true
       })
       scrollToBottom()
       break
-    case 'skill_end':
+    case 'tool_result':
       if (currentMsg.skills && currentMsg.skills.length > 0) {
-        // Find the running skill
-        const skill = currentMsg.skills.slice().reverse().find(s => s.name === data.skill && s.status === 'running')
+        const skill = currentMsg.skills.find(s => s.id === data.tool_call_id)
         if (skill) {
           skill.status = data.status
-          skill.details = data.details
-          // Collapse on success to save space, keep expanded on error?
+          skill.details = {
+            output: data.output,
+            render_type: data.render_type || 'text',
+            execution_time: data.execution_time
+          }
           if (data.status === 'success') {
              skill.expanded = false
+          }
+        }
+      }
+      break
+    case 'tool_error':
+      if (currentMsg.skills && currentMsg.skills.length > 0) {
+        const skill = currentMsg.skills.find(s => s.id === data.tool_call_id)
+        if (skill) {
+          skill.status = 'error'
+          skill.details = {
+            error_message: data.error_message,
+            error_details: data.error_details
           }
         }
       }

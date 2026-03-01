@@ -146,45 +146,6 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         print("Client disconnected")
 
-@router.get("/sse")
-async def sse_endpoint(
-    query: str,
-    session_id: Optional[str] = None,
-    current_path: Optional[str] = None,
-    model: Optional[str] = "deepseek",
-    prompt_style: Optional[str] = "default",
-    qa_service: QAService = Depends(get_qa_service)
-):
-    """
-    Server-Sent Events Endpoint for Real-time Chat.
-    """
-    # [Mock] Edge Computing Filter
-    is_allowed, reason = await mock_edge_filter(query)
-    if not is_allowed:
-         # For SSE, we can yield an error event and close
-         async def block_generator():
-             yield f"data: {json.dumps({'type': 'error', 'content': reason})}\n\n"
-         return StreamingResponse(block_generator(), media_type="text/event-stream")
-
-    request = ChatRequest(
-        query=query, 
-        session_id=session_id, 
-        current_path=current_path,
-        model=model,
-        prompt_style=prompt_style
-    )
-    
-    async def event_generator():
-        try:
-            async for chunk in qa_service.stream_answer_question(request, user_id="student_001"):
-                # SSE format: data: <payload>\n\n
-                yield f"data: {chunk}\n\n"
-        except Exception as e:
-            error_data = json.dumps({"type": "error", "content": str(e)})
-            yield f"data: {error_data}\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
 @router.get("/metrics")
 async def get_metrics():
     """

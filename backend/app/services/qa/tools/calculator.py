@@ -1,6 +1,6 @@
 from typing import Dict, Any
-from backend.app.services.qa.skills.base import BaseSkill
-from backend.app.services.qa.math_solver import MathSolver
+from backend.app.services.qa.tools.base import BaseSkill
+from backend.app.services.qa.tools.math_solver import MathSolver
 from backend.app.core.config import settings
 
 class MathSkill(BaseSkill):

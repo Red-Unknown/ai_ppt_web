@@ -1,9 +1,9 @@
 from typing import Dict, Optional, Any
 import logging
 from backend.app.core.config import settings
-from backend.app.services.qa.skills.base import BaseSkill
-from backend.app.services.qa.skills.math_skill import MathSkill
-from backend.app.services.qa.skills.search_skill import WebSearchSkill
+from backend.app.services.qa.tools.base import BaseSkill
+from backend.app.services.qa.tools.calculator import MathSkill
+from backend.app.services.qa.tools.web_search import WebSearchSkill
 
 logger = logging.getLogger(__name__)
 
