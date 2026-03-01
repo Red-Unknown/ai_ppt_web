@@ -1,0 +1,38 @@
+{
+    "dimensions": {
+        "functionality": {
+            "weight": 0.40,
+            "description": "Accuracy and correctness of tool output based on test cases."
+        },
+        "latency": {
+            "weight": 0.20,
+            "description": "Response time (ms). <200ms=100, >2000ms=0."
+        },
+        "stability": {
+            "weight": 0.10,
+            "description": "Success rate over repeated calls and variance in latency."
+        },
+        "error_handling": {
+            "weight": 0.10,
+            "description": "Ability to gracefully handle invalid inputs without crashing."
+        },
+        "resource_usage": {
+            "weight": 0.10,
+            "description": "Memory and CPU overhead estimation."
+        },
+        "scalability": {
+            "weight": 0.05,
+            "description": "Support for concurrent execution (async/await)."
+        },
+        "security": {
+            "weight": 0.05,
+            "description": "Input sanitization and API key safety."
+        }
+    },
+    "thresholds": {
+        "latency_ms_max_score": 200,
+        "latency_ms_min_score": 2000,
+        "memory_mb_max_score": 50,
+        "memory_mb_min_score": 512
+    }
+}

@@ -55,8 +55,9 @@ def check_dependencies():
     print("Checking system dependencies...")
     
     # Check Python
-    if not shutil.which("python"):
-        print("Error: Python not found in PATH.")
+    print(f"Using Python: {sys.executable}")
+    if not os.path.exists(sys.executable):
+        print("Error: Python executable not found.")
         sys.exit(1)
         
     # Check NPM
@@ -68,7 +69,7 @@ def check_dependencies():
     # Check Backend Deps (fastapi, uvicorn, redis)
     try:
         subprocess.run(
-            ["python", "-c", "import fastapi; import uvicorn; import redis"], 
+            [sys.executable, "-c", "import fastapi; import uvicorn; import redis"], 
             check=True, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.PIPE
@@ -127,7 +128,7 @@ def start_backend(mode="dev"):
     env["PYTHONPATH"] = str(ROOT_DIR)
     
     cmd = [
-        "python", "-m", "uvicorn", 
+        sys.executable, "-m", "uvicorn", 
         "backend.main:app", 
         "--host", "0.0.0.0", 
         "--port", str(BACKEND_PORT)

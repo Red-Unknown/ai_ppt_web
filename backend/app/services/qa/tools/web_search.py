@@ -4,8 +4,11 @@ from typing import Dict, Any, List, Optional
 import logging
 import os
 from bs4 import BeautifulSoup
-import html2text
-from backend.app.services.qa.skills.base import BaseSkill
+try:
+    import html2text
+except ImportError:
+    html2text = None
+from backend.app.services.qa.tools.base import BaseSkill
 
 # Try importing LangChain Community tools, but handle if missing
 try:

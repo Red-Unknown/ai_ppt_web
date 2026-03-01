@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_MODEL: str = "deepseek-chat"
     DEEPSEEK_REASONER_MODEL: str = "deepseek-reasoner"
-    DEEPSEEK_MAX_TOKENS: int = 2048
+    DEEPSEEK_MAX_TOKENS: int = 10000
     DEEPSEEK_TEMPERATURE: float = 0.7
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_PROMPTS_PATH: str = "backend/app/core/prompts/qa_prompts.json"

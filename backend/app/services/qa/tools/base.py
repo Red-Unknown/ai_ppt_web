@@ -32,3 +32,26 @@ class BaseSkill(ABC):
             Can include "details" (intermediate steps, code, etc.).
         """
         pass
+
+    def to_tool_schema(self) -> Dict[str, Any]:
+        """
+        Convert skill to OpenAI tool schema.
+        Can be overridden by subclasses for more complex arguments.
+        """
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The input query or command for the tool."
+                        }
+                    },
+                    "required": ["query"]
+                }
+            }
+        }
