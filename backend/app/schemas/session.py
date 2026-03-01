@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 class SessionMode(str, Enum):
-    LEARN = "learn"
+    LEARNING = "learning"
     PREVIEW = "preview"
 
 class SessionStatus(str, Enum):
