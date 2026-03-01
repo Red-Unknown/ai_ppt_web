@@ -1,0 +1,393 @@
+[
+  {
+    "query": "匀速直线运动",
+    "expected_ids": [
+      "kinematics_001"
+    ],
+    "type": "exact_title"
+  },
+  {
+    "query": "匀变速直线运动",
+    "expected_ids": [
+      "kinematics_002"
+    ],
+    "type": "exact_title"
+  },
+  {
+    "query": "牛顿第一定律",
+    "expected_ids": [
+      "dynamics_001"
+    ],
+    "type": "exact_title"
+  },
+  {
+    "query": "牛顿第二定律",
+    "expected_ids": [
+      "dynamics_002"
+    ],
+    "type": "exact_title"
+  },
+  {
+    "query": "牛顿第三定律",
+    "expected_ids": [
+      "dynamics_003"
+    ],
+    "type": "exact_title"
+  },
+  {
+    "query": "动能定理",
+    "expected_ids": [
+      "energy_001"
+    ],
+    "type": "exact_title"
+  },
+  {
+    "query": "机械能守恒",
+    "expected_ids": [
+      "energy_002"
+    ],
+    "type": "exact_title"
+  },
+  {
+    "query": "动量守恒",
+    "expected_ids": [
+      "momentum_001"
+    ],
+    "type": "exact_title"
+  },
+  {
+    "query": "光的反射",
+    "expected_ids": [
+      "optics_001"
+    ],
+    "type": "exact_title"
+  },
+  {
+    "query": "库仑定律",
+    "expected_ids": [
+      "em_001"
+    ],
+    "type": "exact_title"
+  },
+  {
+    "query": "二叉树遍历",
+    "expected_ids": [
+      "ds_001"
+    ],
+    "type": "exact_title"
+  },
+  {
+    "query": "匀速直线动运",
+    "expected_ids": [
+      "kinematics_001"
+    ],
+    "type": "typo"
+  },
+  {
+    "query": "匀变速直线运",
+    "expected_ids": [
+      "kinematics_002"
+    ],
+    "type": "typo"
+  },
+  {
+    "query": "牛顿第定一律",
+    "expected_ids": [
+      "dynamics_001"
+    ],
+    "type": "typo"
+  },
+  {
+    "query": "顿第二定律",
+    "expected_ids": [
+      "dynamics_002"
+    ],
+    "type": "typo"
+  },
+  {
+    "query": "人能定理",
+    "expected_ids": [
+      "energy_001"
+    ],
+    "type": "typo"
+  },
+  {
+    "query": "机械能恒",
+    "expected_ids": [
+      "energy_002"
+    ],
+    "type": "typo"
+  },
+  {
+    "query": "动量一恒",
+    "expected_ids": [
+      "momentum_001"
+    ],
+    "type": "typo"
+  },
+  {
+    "query": "库定仑律",
+    "expected_ids": [
+      "em_001"
+    ],
+    "type": "typo"
+  },
+  {
+    "query": "二叉树遍",
+    "expected_ids": [
+      "ds_001"
+    ],
+    "type": "typo"
+  },
+  {
+    "query": "速度运动，位移与时间",
+    "expected_ids": [
+      "kinematics_001"
+    ],
+    "type": "content_fragment"
+  },
+  {
+    "query": " + at, s =",
+    "expected_ids": [
+      "kinematics_002"
+    ],
+    "type": "content_fragment"
+  },
+  {
+    "query": "没有外力作用时保持静",
+    "expected_ids": [
+      "dynamics_001"
+    ],
+    "type": "content_fragment"
+  },
+  {
+    "query": "成正比，与质量成反比",
+    "expected_ids": [
+      "dynamics_002"
+    ],
+    "type": "content_fragment"
+  },
+  {
+    "query": "、作用在不同物体上。",
+    "expected_ids": [
+      "dynamics_003"
+    ],
+    "type": "content_fragment"
+  },
+  {
+    "query": "mv² - ½mv₀",
+    "expected_ids": [
+      "energy_001"
+    ],
+    "type": "content_fragment"
+  },
+  {
+    "query": "在只有保守力做功的情",
+    "expected_ids": [
+      "energy_002"
+    ],
+    "type": "content_fragment"
+  },
+  {
+    "query": "一个孤立系统中，所有",
+    "expected_ids": [
+      "momentum_001"
+    ],
+    "type": "content_fragment"
+  },
+  {
+    "query": "处返回原介质的现象，",
+    "expected_ids": [
+      "optics_001"
+    ],
+    "type": "content_fragment"
+  },
+  {
+    "query": "积成正比，与距离的平",
+    "expected_ids": [
+      "em_001"
+    ],
+    "type": "content_fragment"
+  },
+  {
+    "query": "、中序、后序遍历算法",
+    "expected_ids": [
+      "ds_001"
+    ],
+    "type": "content_fragment"
+  },
+  {
+    "query": "匀变速直线运动与牛顿第一定律的区别",
+    "expected_ids": [
+      "kinematics_002",
+      "dynamics_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "动量守恒与二叉树遍历的区别",
+    "expected_ids": [
+      "momentum_001",
+      "ds_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "光的反射与动能定理的区别",
+    "expected_ids": [
+      "optics_001",
+      "energy_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "匀速直线运动与牛顿第二定律的区别",
+    "expected_ids": [
+      "kinematics_001",
+      "dynamics_002"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "库仑定律与动能定理的区别",
+    "expected_ids": [
+      "em_001",
+      "energy_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "牛顿第二定律与匀速直线运动的区别",
+    "expected_ids": [
+      "dynamics_002",
+      "kinematics_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "动量守恒与匀变速直线运动的区别",
+    "expected_ids": [
+      "momentum_001",
+      "kinematics_002"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "机械能守恒与牛顿第二定律的区别",
+    "expected_ids": [
+      "energy_002",
+      "dynamics_002"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "牛顿第三定律与匀速直线运动的区别",
+    "expected_ids": [
+      "dynamics_003",
+      "kinematics_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "匀速直线运动与牛顿第一定律的区别",
+    "expected_ids": [
+      "kinematics_001",
+      "dynamics_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "动量守恒与匀速直线运动的区别",
+    "expected_ids": [
+      "momentum_001",
+      "kinematics_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "匀变速直线运动与匀速直线运动的区别",
+    "expected_ids": [
+      "kinematics_002",
+      "kinematics_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "牛顿第二定律与光的反射的区别",
+    "expected_ids": [
+      "dynamics_002",
+      "optics_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "匀速直线运动与牛顿第三定律的区别",
+    "expected_ids": [
+      "kinematics_001",
+      "dynamics_003"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "机械能守恒与牛顿第三定律的区别",
+    "expected_ids": [
+      "energy_002",
+      "dynamics_003"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "机械能守恒与动能定理的区别",
+    "expected_ids": [
+      "energy_002",
+      "energy_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "动能定理与牛顿第一定律的区别",
+    "expected_ids": [
+      "energy_001",
+      "dynamics_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "二叉树遍历与动能定理的区别",
+    "expected_ids": [
+      "ds_001",
+      "energy_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "动量守恒与牛顿第一定律的区别",
+    "expected_ids": [
+      "momentum_001",
+      "dynamics_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "库仑定律与牛顿第一定律的区别",
+    "expected_ids": [
+      "em_001",
+      "dynamics_001"
+    ],
+    "type": "multi_concept"
+  },
+  {
+    "query": "Uniform Rectilinear Motion",
+    "expected_ids": [
+      "kinematics_001"
+    ],
+    "type": "synonym"
+  },
+  {
+    "query": "恒速运动",
+    "expected_ids": [
+      "kinematics_001"
+    ],
+    "type": "synonym"
+  }
+]

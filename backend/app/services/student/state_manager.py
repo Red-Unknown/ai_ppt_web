@@ -129,10 +129,19 @@ class StudentStateManager:
             session_id=session_id,
             current_topic=topic,
             confusion_count=0,
-            last_interaction_time=datetime.now()
+            last_interaction_time=datetime.now(),
+            last_qa_query=None
         )
         redis_client.set(cls._get_state_key(session_id), state.json())
         return state
+
+    @classmethod
+    def update_last_query(cls, session_id: str, query: str):
+        state = cls.get_state(session_id)
+        if state:
+            state.last_qa_query = query
+            state.last_interaction_time = datetime.now()
+            redis_client.set(cls._get_state_key(session_id), state.json())
 
     @classmethod
     def increment_confusion(cls, session_id: str) -> int:

@@ -32,10 +32,10 @@ class ConfigurationError(Exception):
 class QAService:
 
     SCENARIO_CONFIGS = {
-        "qa": {"temperature": 0.7, "max_tokens": 10000},
-        "reasoner": {"temperature": 0.6, "max_tokens": 10000},
-        "summary": {"temperature": 0.3, "max_tokens": 10000},
-        "translation": {"temperature": 0.1, "max_tokens": 4096},
+        "qa": {"temperature": 0.7, "max_tokens": 4000},
+        "reasoner": {"temperature": 0.6, "max_tokens": 4000},
+        "summary": {"temperature": 0.3, "max_tokens": 4000},
+        "translation": {"temperature": 0.1, "max_tokens": 4000},
     }
 
     def __init__(self):
@@ -142,7 +142,7 @@ class QAService:
         self.agent = ReActAgent(
             llm=self.llm_clients["qa"],
             tools=tools,
-            max_iterations=8,
+            max_iterations=15,
             system_prompt=system_prompt
         )
         logger.info(f"ReAct Agent initialized with tools: {[t.name for t in tools]}")
@@ -223,6 +223,33 @@ class QAService:
         else:
             return [f"More details about {query}?", "Examples?", "Related concepts?"]
 
+    async def _direct_rag_stream(self, query: str, context_str: str, history_list: List[Dict]) -> AsyncGenerator[str, None]:
+        """
+        Stream answer using Direct RAG (No ReAct loop).
+        """
+        history_str = self._truncate_history_by_tokens(history_list, max_tokens=2000)
+        
+        prompt_template = self.get_prompt_template("v5_enhanced_zh")
+        chain_input = {
+            "context": context_str, 
+            "question": query, 
+            "history": history_str
+        }
+        
+        yield json.dumps({"type": "start", "action": "QA_ANSWER"})
+        
+        try:
+            # Manually format messages
+            formatted_messages = prompt_template.format_messages(**chain_input)
+            
+            async for chunk in self.llm.astream(formatted_messages):
+                if chunk.content:
+                    yield json.dumps({"type": "token", "content": chunk.content})
+            
+        except Exception as e:
+            logger.error(f"Direct RAG error: {e}")
+            yield json.dumps({"type": "error", "content": f"Generation Error: {str(e)}"})
+
     async def stream_answer_question(self, request: ChatRequest, user_id: str = "student_001") -> AsyncGenerator[str, None]:
         """
         Stream response for WebSocket using Server-Sent Events style JSON chunks.
@@ -265,14 +292,30 @@ class QAService:
         elif intent == Intent.FEEDBACK:
             # Retrieve context first
             self.retriever.current_path = request.current_path
-            docs = self.retriever.invoke(request.query)
+            
+            # IMPROVED: Use last successful QA query for context retrieval if available
+            search_query = request.query
+            if state.last_qa_query and len(request.query) < 10:
+                search_query = state.last_qa_query
+                logger.info(f"Using last QA query for feedback context: {search_query}")
+                
+            docs = self.retriever.invoke(search_query)
             context_str = "\n".join([d.page_content[:200] for d in docs])
             
             yield json.dumps({"type": "status", "content": "正在分析反馈..."})
             
+            # Use last_qa_query as topic if available, otherwise use state.current_topic
+            original_topic = state.current_topic
+            if state.last_qa_query:
+                # Temporarily update state for feedback handling
+                state.current_topic = state.last_qa_query
+            
             feedback_result = await self.teacher.handle_feedback(
                 request.query, state, profile, context_str
             )
+            
+            # Restore state
+            state.current_topic = original_topic
             
             if feedback_result.get("action") in ["SUPPLEMENT", "FALLBACK_VIDEO"]:
                 StudentStateManager.increment_confusion(session_id)
@@ -297,8 +340,8 @@ class QAService:
             yield json.dumps({"type": "end"})
             return
 
-        else: # Intent.QA (Handled by ReAct Agent)
-            yield json.dumps({"type": "status", "content": "正在启动思维链 (ReAct)..."})
+        else: # Intent.QA
+            yield json.dumps({"type": "status", "content": "正在分析意图..."})
             StudentStateManager.reset_confusion(session_id)
             
             # Analyze QA Type for Instruction Injection
@@ -365,6 +408,66 @@ class QAService:
                     return
             # --- DEEPSEEK REASONER BYPASS END ---
 
+            # 1. Retrieve & Confidence Check
+            yield json.dumps({"type": "status", "content": "正在检索本地知识库..."})
+            docs = self.retriever.invoke(request.query)
+            
+            # Extract confidence from top-1 doc
+            top_score = 0.0
+            if docs:
+                top_score = docs[0].metadata.get("score", 0.0)
+            
+            context_str = "\n\n".join([f"【来源：{d.metadata.get('path', '未知路径')}】\n内容：{d.page_content}" for d in docs])
+            logger.info(f"Retrieval Confidence: {top_score:.4f}")
+
+            # 2. Decision Logic (Heuristics)
+            use_react = False
+            use_web_search = False
+            
+            # Trigger Conditions
+            is_time_sensitive = any(k in request.query for k in ["最新", "今天", "2024", "股价", "汇率", "天气"])
+            is_complex_intent = qa_type in ["MATH_CALCULATION", "LOGIC_PUZZLE", "FACT_CHECK"]
+            is_low_confidence = top_score < 0.75 
+            
+            # Safety / Guardrails
+            if "删除" in request.query and ("脚本" in request.query or "文件" in request.query):
+                yield json.dumps({"type": "status", "content": "触发安全拦截..."})
+                yield json.dumps({"type": "token", "content": "抱歉，我不能执行删除文件等危险操作。"})
+                yield json.dumps({"type": "end"})
+                return
+
+            # Web Search Logic
+            if is_time_sensitive or qa_type == "DYNAMIC_DATA":
+                use_web_search = True
+            elif is_low_confidence and not is_complex_intent:
+                use_web_search = True
+            
+            # Suppression Logic
+            if top_score >= 0.85 and not is_time_sensitive:
+                use_web_search = False
+            
+            # COMPARISON Optimization: Prefer Direct RAG if not too low confidence
+            if qa_type == "COMPARISON" and top_score > 0.4:
+                use_web_search = False
+                
+            # ReAct Logic
+            if is_complex_intent:
+                use_react = True
+            if use_web_search:
+                use_react = True
+            if "逐步" in request.query or "分析" in request.query:
+                use_react = True
+            
+            # Whitelist (Fast Path)
+            if len(request.query) < 10 and qa_type == "FACTOID":
+                use_react = False
+                use_web_search = False
+            
+            # Demo Hardcode: Force Direct RAG for specific demo questions
+            if "对比" in request.query and "适用条件" in request.query:
+                use_react = False
+                use_web_search = False
+
             # Prepare Query with Instructions
             final_query = request.query
             if qa_type == "MULTI_STEP":
@@ -376,44 +479,79 @@ class QAService:
             elif qa_type == "EXAMPLE":
                 final_query += "\n\n(Instruction: The student is asking for examples. If the knowledge base lacks examples, please provide a general real-world example and mark it as 'General Knowledge'.)"
             
+            if use_web_search:
+                final_query += "\n\n(Instruction: Local knowledge might be insufficient or time-sensitive data is required. Please use WebSearch tool if needed.)"
+                
+            # Inject Context for ReAct to avoid double retrieval
+            if use_react and context_str:
+                final_query += f"\n\n[Provided Local Context]:\n{context_str}\n\n(Instruction: You may use the provided context above. If it's insufficient, use tools to search.)"
+
             # Prepare History
             history_list = StudentStateManager.get_history(session_id, limit=20)
             
-            yield json.dumps({"type": "start", "action": "QA_ANSWER"})
-
-            # Execute ReAct Loop
             full_answer_accumulator = ""
-            try:
-                async for event_str in self.agent.run(final_query, history=history_list):
-                    event = json.loads(event_str)
-                    evt_type = event.get("type")
+            
+            if use_react:
+                yield json.dumps({"type": "status", "content": "启用多步推理模式 (ReAct)..."})
+                yield json.dumps({"type": "start", "action": "QA_ANSWER"})
+                
+                try:
+                    async for event_str in self.agent.run(final_query, history=history_list):
+                         event = json.loads(event_str)
+                         evt_type = event.get("type")
+                         
+                         if evt_type == "thought":
+                             yield json.dumps({"type": "status", "content": f"Thinking: {event.get('content')}"})
+                             yield event_str # Pass thought to frontend
+                         elif evt_type == "iteration":
+                             yield json.dumps({"type": "status", "content": f"启用多步推理模式 (ReAct)... 轮次 {event.get('iteration')}"})
+                         elif evt_type == "tool_start":
+                             tool_name = event.get("tool_name", "")
+                             desc = f"正在调用工具: {tool_name}"
+                             
+                             if tool_name == "web_search":
+                                 query = event.get("inputs", {}).get("query", "")
+                                 desc = f"正在调用连网查询工具，搜索...{query[:15]}"
+                             elif tool_name in ["calculator", "math_solver"]:
+                                 desc = "正在调用计算工具 （显示代码）"
+                             
+                             yield json.dumps({"type": "status", "content": desc})
+                             yield event_str
+                         elif evt_type in ["tool_start", "tool_result", "tool_error", "usage"]:
+                             yield event_str
+                         elif evt_type == "answer":
+                             content = event.get("content", "")
+                             full_answer_accumulator += content
+                             chunk_size = 5
+                             for i in range(0, len(content), chunk_size):
+                                 yield json.dumps({"type": "token", "content": content[i:i+chunk_size]})
+                                 await asyncio.sleep(0.01)
+                         elif evt_type == "error":
+                             yield json.dumps({"type": "error", "content": event.get("content")})
+                         elif evt_type == "done":
+                             yield json.dumps({"type": "end"})
+                except Exception as e:
+                    logger.error(f"ReAct execution failed: {e}", exc_info=True)
+                    yield json.dumps({"type": "error", "content": f"System Error: {str(e)}"})
+                    yield json.dumps({"type": "end"})
+
+            else:
+                yield json.dumps({"type": "status", "content": "使用直接回答模式..."})
+                
+                # We need to manually iterate and accumulate
+                async for chunk_str in self._direct_rag_stream(final_query, context_str, history_list):
+                    event = json.loads(chunk_str)
+                    if event["type"] == "token":
+                        full_answer_accumulator += event["content"]
+                    yield chunk_str
                     
-                    if evt_type == "thought":
-                        # Display thought process as status or debug info
-                        yield json.dumps({"type": "status", "content": f"Thinking: {event.get('content')}"})
-                        
-                    elif evt_type in ["tool_start", "tool_result", "tool_error"]:
-                        # MCP Events - Pass through directly
-                        yield event_str
-                        
-                    elif evt_type == "answer":
-                        content = event.get("content", "")
-                        full_answer_accumulator += content
-                        # Simulate streaming for better UX since ReActAgent returns bulk answer
-                        chunk_size = 5
-                        for i in range(0, len(content), chunk_size):
-                            yield json.dumps({"type": "token", "content": content[i:i+chunk_size]})
-                            await asyncio.sleep(0.01)
-                            
-                    elif evt_type == "error":
-                        yield json.dumps({"type": "error", "content": event.get("content")})
-                        
-                    elif evt_type == "done":
-                        yield json.dumps({"type": "end"})
-                        
-            except Exception as e:
-                logger.error(f"ReAct execution failed: {e}", exc_info=True)
-                yield json.dumps({"type": "error", "content": f"System Error: {str(e)}"})
+                # Append "Local Knowledge" hint if needed
+                if top_score >= 0.75 and not is_time_sensitive:
+                     hint = "\n\n（注：答案基于本地知识库）"
+                     full_answer_accumulator += hint
+                     yield json.dumps({"type": "token", "content": hint})
+                
+                # Send End
                 yield json.dumps({"type": "end"})
             
             # Save Interaction
@@ -421,6 +559,8 @@ class QAService:
                 StudentStateManager.add_history(session_id, "user", request.query)
                 if full_answer_accumulator:
                     StudentStateManager.add_history(session_id, "assistant", full_answer_accumulator)
+                    # Update last successful QA query for context tracking
+                    StudentStateManager.update_last_query(session_id, request.query)
             except Exception as e:
                 logger.error(f"Failed to save history: {e}")
             return

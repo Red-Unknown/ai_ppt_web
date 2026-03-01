@@ -60,24 +60,27 @@ class DialogueRouter:
         # Clean query
         q = query.strip()
         
+        # Control Patterns (Strict Matching)
+        # Check first because commands are usually short and specific
+        for pattern in self.control_patterns:
+            if re.search(pattern, q):
+                return Intent.CONTROL
+
+        # Feedback Patterns
+        for pattern in self.feedback_patterns:
+            if re.search(pattern, q):
+                # "太快了" / "太慢了" / "再讲一遍" can be seen as CONTROL or FEEDBACK.
+                # If we want to strictly follow the doc where "太快了" -> CONTROL, we should map it here.
+                if "太快" in q or "太慢" in q or "再讲一遍" in q:
+                     return Intent.CONTROL
+                return Intent.FEEDBACK
+
         # QA Patterns (Priority High for Questions)
         qa_keywords = ["什么", "为什么", "怎么", "解释", "含义", "意思", "who", "what", "why", "how"]
         if any(k in q for k in qa_keywords) or "?" in q or "？" in q:
             # Even if it contains "暂停", "为什么暂停" is a QA.
             # Unless it is exactly "为什么要暂停？" which is ambiguous but usually QA.
             return Intent.QA
-
-        # Control Patterns (Strict Matching)
-        # Only match if the query is short and looks like a command
-        if len(q) < 10:
-            for pattern in self.control_patterns:
-                if re.search(pattern, q):
-                    return Intent.CONTROL
-        
-        # Feedback Patterns
-        for pattern in self.feedback_patterns:
-            if re.search(pattern, q):
-                return Intent.FEEDBACK
                 
         return None
 

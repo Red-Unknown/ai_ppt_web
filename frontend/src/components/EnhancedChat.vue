@@ -148,8 +148,65 @@
           <div :class="['max-w-[85%] md:max-w-[75%] rounded-2xl px-5 py-4 shadow-sm text-sm md:text-base', 
             msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none']">
             
-            <!-- Skill Executions -->
-            <div v-if="msg.role === 'assistant' && msg.skills && msg.skills.length > 0" class="mb-4 space-y-2 w-full">
+            <!-- Real-time Status Panel -->
+            <div v-if="msg.role === 'assistant' && msg.status_updates && msg.status_updates.length > 0" class="mb-4 bg-gray-50 rounded-lg border border-gray-100 p-2 text-xs font-mono text-gray-600 space-y-1">
+               <div v-for="(status, sIdx) in msg.status_updates" :key="sIdx" class="flex items-center gap-2 animate-in fade-in duration-300">
+                  <span class="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0"></span>
+                  <span>{{ status }}</span>
+               </div>
+            </div>
+
+            <!-- ReAct Chain Visualization -->
+            <div v-if="msg.role === 'assistant' && msg.react_steps && msg.react_steps.length > 0" class="mb-4 space-y-2 w-full">
+              <div class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 ml-1">Thinking Process</div>
+              <div v-for="(step, stepIdx) in msg.react_steps" :key="stepIdx" class="border border-purple-100 bg-purple-50/30 rounded-lg overflow-hidden transition-all duration-200 hover:shadow-sm">
+                <!-- Step Header -->
+                <div class="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-purple-50 transition-colors select-none" @click="step.expanded = !step.expanded">
+                   <div class="flex items-center gap-2">
+                      <div class="w-5 h-5 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-[10px] font-bold border border-purple-200">
+                        {{ step.iteration || stepIdx + 1 }}
+                      </div>
+                      <span class="text-xs font-semibold text-purple-900 truncate max-w-[150px]">{{ step.tool_name || 'Reasoning' }}</span>
+                   </div>
+                   <div class="flex items-center gap-2 text-[10px] text-gray-400">
+                      <span v-if="step.duration">{{ step.duration.toFixed(2) }}s</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 transform transition-transform duration-200" :class="{ 'rotate-180': step.expanded }" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                      </svg>
+                   </div>
+                </div>
+                
+                <!-- Step Details -->
+                <div v-if="step.expanded" class="px-3 py-2 border-t border-purple-100 bg-white text-xs font-mono overflow-x-auto max-h-80 custom-scrollbar">
+                   <!-- Thought -->
+                   <div v-if="step.thought" class="mb-3">
+                      <div class="text-purple-400 mb-1 font-bold flex items-center gap-1">Thought</div>
+                      <div class="bg-purple-50 p-2 rounded text-gray-700 border border-purple-100 whitespace-pre-wrap">{{ step.thought }}</div>
+                   </div>
+                   
+                   <!-- Tool Input -->
+                   <div v-if="step.inputs" class="mb-3">
+                      <div class="text-blue-400 mb-1 font-bold flex items-center gap-1">Input</div>
+                      <pre class="bg-blue-50 p-2 rounded text-gray-700 border border-blue-100">{{ JSON.stringify(step.inputs, null, 2) }}</pre>
+                   </div>
+                   
+                   <!-- Tool Output -->
+                   <div v-if="step.output" class="mb-1">
+                      <div class="text-emerald-400 mb-1 font-bold flex items-center gap-1">Output</div>
+                      <pre class="bg-emerald-50 p-2 rounded text-gray-700 border border-emerald-100 whitespace-pre-wrap">{{ step.output }}</pre>
+                   </div>
+                   
+                   <!-- Error -->
+                   <div v-if="step.error" class="mb-1">
+                      <div class="text-red-400 mb-1 font-bold flex items-center gap-1">Error</div>
+                      <div class="bg-red-50 p-2 rounded text-red-700 border border-red-100 whitespace-pre-wrap">{{ step.error }}</div>
+                   </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Skill Executions (Legacy/Direct) -->
+            <div v-if="msg.role === 'assistant' && msg.skills && msg.skills.length > 0 && (!msg.react_steps || msg.react_steps.length === 0)" class="mb-4 space-y-2 w-full">
               <div v-for="(skill, sIdx) in msg.skills" :key="sIdx" class="border border-blue-100 bg-blue-50/50 rounded-lg overflow-hidden transition-all duration-200 hover:shadow-sm">
                 <!-- Header -->
                 <div class="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-blue-50 transition-colors select-none" @click="skill.expanded = !skill.expanded">
@@ -765,7 +822,9 @@ async function sendMessage() {
       reasoning: '',
       sources: [],
       skills: [],
-      status: null
+      status: null,
+      status_updates: [],
+      react_steps: []
     })
     
     scrollToBottom()
@@ -799,68 +858,95 @@ function handleWSMessage(data) {
       currentMsg.content += data.content
       scrollToBottom()
       break
-    case 'reasoning':
-      if (!currentMsg.reasoning) currentMsg.reasoning = ''
-      currentMsg.reasoning += data.content
-      // Auto-set status to thinking if receiving reasoning
-      currentMsg.status = 'thinking'
-      scrollToBottom()
+    
+    case 'status':
+      if (!currentMsg.status_updates) currentMsg.status_updates = []
+      currentMsg.status_updates.push(data.content)
+      // Keep only last 5 status updates to avoid clutter
+      if (currentMsg.status_updates.length > 5) {
+         currentMsg.status_updates.shift()
+      }
       break
-    case 'sources':
-      currentMsg.sources = data.data
+
+    case 'iteration':
+      // Backend signals new ReAct iteration
+      // We can create a placeholder step or just log it
       break
+
     case 'tool_start':
-      if (!currentMsg.skills) currentMsg.skills = []
-      currentMsg.skills.push({
-        id: data.tool_call_id,
-        name: data.tool_name,
-        description: data.description || `Calling ${data.tool_name}...`,
+      if (!currentMsg.react_steps) currentMsg.react_steps = []
+      currentMsg.react_steps.push({
+        type: 'tool',
+        tool_name: data.tool_name,
         inputs: data.inputs,
+        expanded: true,
         status: 'running',
-        details: null,
-        expanded: true
+        iteration: currentMsg.react_steps.length + 1 // Or use data.iteration if available
       })
       scrollToBottom()
       break
+
     case 'tool_result':
-      if (currentMsg.skills && currentMsg.skills.length > 0) {
-        const skill = currentMsg.skills.find(s => s.id === data.tool_call_id)
-        if (skill) {
-          skill.status = data.status
-          skill.details = {
-            output: data.output,
-            render_type: data.render_type || 'text',
-            execution_time: data.execution_time
-          }
-          if (data.status === 'success') {
-             skill.expanded = false
-          }
+      if (currentMsg.react_steps && currentMsg.react_steps.length > 0) {
+        // Find the last running tool step
+        // Ideally we should match by ID, but for now assuming sequential
+        const step = currentMsg.react_steps[currentMsg.react_steps.length - 1]
+        if (step) {
+          step.output = data.output
+          step.status = 'success'
+          step.duration = data.execution_time
+          step.expanded = false // Auto-collapse on success
         }
       }
       break
+
     case 'tool_error':
-      if (currentMsg.skills && currentMsg.skills.length > 0) {
-        const skill = currentMsg.skills.find(s => s.id === data.tool_call_id)
-        if (skill) {
-          skill.status = 'error'
-          skill.details = {
-            error_message: data.error_message,
-            error_details: data.error_details
-          }
+      if (currentMsg.react_steps && currentMsg.react_steps.length > 0) {
+        const step = currentMsg.react_steps[currentMsg.react_steps.length - 1]
+        if (step) {
+          step.error = data.error_message
+          step.status = 'error'
+          step.expanded = true
         }
       }
       break
-    case 'status':
-      currentMsg.status = data.content
+      
+    case 'thought':
+      if (!currentMsg.react_steps) currentMsg.react_steps = []
+      // Check if last step is a thought step, if so append, else create new
+      // But ReAct usually does Thought -> Action.
+      // Let's attach thought to the next action or create a standalone thought block?
+      // Simpler: Just create a step for thought.
+      currentMsg.react_steps.push({
+         type: 'thought',
+         thought: data.content,
+         expanded: true,
+         iteration: currentMsg.react_steps.length + 1
+      })
+      scrollToBottom()
       break
+      
+    case 'usage':
+      // Handle usage stats if needed
+      console.log('Usage:', data)
+      break
+
+    case 'reasoning':
+      if (!currentMsg.reasoning) currentMsg.reasoning = ''
+      currentMsg.reasoning += data.content
+      currentMsg.status = 'thinking'
+      scrollToBottom()
+      break
+    
+    case 'sources':
+      currentMsg.sources = data.data
+      break
+      
     case 'end':
       isStreaming.value = false
       currentMsg.status = null
-      // 清除任何可能的thinking状态
-      if (currentMsg.reasoning) {
-        currentMsg.reasoning = ''
-      }
       break
+      
     case 'error':
       currentMsg.content += `\n[Error: ${data.content}]`
       isStreaming.value = false

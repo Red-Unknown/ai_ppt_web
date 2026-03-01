@@ -75,13 +75,36 @@ class ReActAgent:
             while iteration < self.max_iterations and not final_answer_reached:
                 iteration += 1
                 logger.info(f"ReAct Loop Iteration {iteration}")
+                yield json.dumps({"type": "iteration", "iteration": iteration})
                 
                 # Call LLM
                 # Using ainvoke for simplicity and robustness in tool calling
                 # Streaming tool calls is complex, so we stream the 'thought' after generation 
                 # or if we switch to astream later.
+                start_llm_time = time.time()
                 response_msg = await self.llm_with_tools.ainvoke(messages)
+                llm_duration = time.time() - start_llm_time
                 
+                # Log Cache Usage if available (DeepSeek)
+                usage_metadata = {}
+                if hasattr(response_msg, "response_metadata"):
+                    usage_metadata = response_msg.response_metadata.get("usage", {})
+                elif hasattr(response_msg, "additional_kwargs"):
+                    # Fallback for older LangChain versions or different providers
+                    usage_metadata = response_msg.additional_kwargs.get("usage", {})
+                
+                if usage_metadata:
+                    cache_hit = usage_metadata.get("prompt_cache_hit_tokens", 0)
+                    cache_miss = usage_metadata.get("prompt_cache_miss_tokens", 0)
+                    total_tokens = usage_metadata.get("total_tokens", 0)
+                    logger.info(f"LLM Usage - Hit: {cache_hit}, Miss: {cache_miss}, Total: {total_tokens}")
+                    yield json.dumps({
+                        "type": "usage", 
+                        "hit_tokens": cache_hit, 
+                        "miss_tokens": cache_miss,
+                        "total_tokens": total_tokens
+                    })
+
                 # Append the assistant's response to history
                 messages.append(response_msg)
                 
@@ -118,13 +141,15 @@ class ReActAgent:
                             "tool_call_id": call_id,
                             "tool_name": func_name,
                             "inputs": args,
-                            "description": f"Calling {func_name}..."
+                            "description": f"Calling {func_name}...",
+                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
                         })
                         
                         tool_instance = self.tools.get(func_name)
                         output_content = ""
                         status = "error"
                         render_type = "text"
+                        error_trace = None
                         
                         if tool_instance:
                             try:
@@ -137,6 +162,17 @@ class ReActAgent:
                                 status = tool_result.get("status", "success")
                                 render_type = tool_result.get("render_type", "text")
                                 
+                                # Log Structured Tool Execution
+                                logger.info(json.dumps({
+                                    "event": "tool_execution",
+                                    "tool": func_name,
+                                    "inputs": args,
+                                    "outputs": output_content[:200] + "..." if len(output_content) > 200 else output_content,
+                                    "duration": duration,
+                                    "status": status,
+                                    "timestamp": time.time()
+                                }, ensure_ascii=False))
+
                                 # MCP: tool_result
                                 yield json.dumps({
                                     "type": "tool_result",
@@ -145,12 +181,16 @@ class ReActAgent:
                                     "status": status,
                                     "output": output_content,
                                     "render_type": render_type,
-                                    "execution_time": duration
+                                    "execution_time": duration,
+                                    "inputs": args # Echo inputs for frontend detail view
                                 })
                                 
                             except Exception as e:
+                                import traceback
+                                error_trace = traceback.format_exc()
                                 output_content = f"Error executing tool {func_name}: {str(e)}"
-                                logger.error(output_content)
+                                logger.error(f"Tool Error: {output_content}\n{error_trace}")
+                                
                                 # MCP: tool_error
                                 yield json.dumps({
                                     "type": "tool_error", 
@@ -158,7 +198,8 @@ class ReActAgent:
                                     "tool_name": func_name,
                                     "status": "error",
                                     "error_message": str(e),
-                                    "error_details": str(e)
+                                    "error_details": error_trace,
+                                    "inputs": args
                                 })
                         else:
                             output_content = f"Error: Tool '{func_name}' not found."
@@ -170,7 +211,8 @@ class ReActAgent:
                                 "tool_name": func_name,
                                 "status": "error",
                                 "error_message": f"Tool '{func_name}' not found",
-                                "error_details": "Tool not registered in agent"
+                                "error_details": "Tool not registered in agent",
+                                "inputs": args
                             })
 
                         # Append Tool Output to History
