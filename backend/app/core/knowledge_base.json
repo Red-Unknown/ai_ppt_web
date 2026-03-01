@@ -8,6 +8,7 @@
           {
             "id": "kinematics_001",
             "title": "匀速直线运动",
+            "synonyms": ["Uniform Rectilinear Motion", "恒速运动"],
             "content": "物体在直线上以恒定速度运动，位移与时间成正比。公式：s = vt",
             "examples": [
               "汽车以60km/h的速度匀速行驶2小时，求行驶距离",

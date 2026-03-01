@@ -33,6 +33,7 @@ class TeacherAgent:
             Task: Generate a short (30-60 seconds read time) supplementary explanation.
             Strategy: Use an analogy related to daily life or history to explain the concept.
             Tone: Encouraging, clear, and simple.
+            Language: Chinese (Simplified) unless the topic or context is explicitly in English.
             
             Current Context Content:
             {context_content}
@@ -76,7 +77,7 @@ class TeacherAgent:
         """
         # Simple sentiment analysis (Mock or LLM)
         # For now, assume if routed here as FEEDBACK, we check for confusion keywords
-        confusion_keywords = ["不懂", "没听懂", "困惑", "难", "confused", "hard"]
+        confusion_keywords = ["不懂", "没听懂", "困惑", "难", "confused", "hard", "没懂", "不明白", "看不懂", "不明"]
         is_confused = any(k in feedback_text for k in confusion_keywords)
         
         if is_confused:
@@ -102,10 +103,16 @@ class TeacherAgent:
         """
         Generate supplementary explanation using LLM.
         """
+        # If context is empty or very short, fallback to using the topic itself for context generation
+        if not context_content or len(context_content) < 50:
+             # This happens if RAG failed or topic is not in KB. 
+             # We rely on the LLM's internal knowledge but prompt it to be careful.
+             context_content = f"Topic to explain: {topic}. (Note: Local knowledge base lacks specific details, please provide general educational explanation)"
+
         chain = self.supplement_prompt | self.llm | StrOutputParser()
         try:
             return await chain.ainvoke({
-                "topic": topic,
+                "topic": topic, # Ensure 'topic' is passed correctly
                 "weaknesses": ",".join(profile.weaknesses),
                 "learning_style": profile.learning_style,
                 "context_content": context_content

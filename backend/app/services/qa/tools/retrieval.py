@@ -39,8 +39,17 @@ class LocalKnowledgeTool(BaseSkill):
 
             # 2. Multi-path Retrieval (Parallel)
             # Use ainvoke for async retrieval if available, else wrap
+            # Note: retriever.ainvoke returns List[Document]
             tasks = [self.retriever.ainvoke(q) for q in sub_queries]
             results = await asyncio.gather(*tasks)
+            
+            # Extract source node IDs safely
+            source_nodes = []
+            for result_list in results:
+                for doc in result_list:
+                    # Document objects might not have node_id, use metadata or hash
+                    node_id = doc.metadata.get("id") or doc.metadata.get("source") or str(hash(doc.page_content))
+                    source_nodes.append(node_id)
 
             # 3. Aggregate & Deduplicate
             aggregated_context = self._aggregate_results(results)
@@ -50,7 +59,7 @@ class LocalKnowledgeTool(BaseSkill):
                 "content": aggregated_context,
                 "details": {
                     "sub_queries": sub_queries,
-                    "source_nodes": [node.node_id for r in results for node in r]
+                    "source_nodes": source_nodes
                 }
             }
         except Exception as e:
