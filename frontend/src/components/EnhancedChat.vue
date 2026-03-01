@@ -148,6 +148,81 @@
           <div :class="['max-w-[85%] md:max-w-[75%] rounded-2xl px-5 py-4 shadow-sm text-sm md:text-base', 
             msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none']">
             
+            <!-- Skill Executions -->
+            <div v-if="msg.role === 'assistant' && msg.skills && msg.skills.length > 0" class="mb-4 space-y-2 w-full">
+              <div v-for="(skill, sIdx) in msg.skills" :key="sIdx" class="border border-blue-100 bg-blue-50/50 rounded-lg overflow-hidden transition-all duration-200 hover:shadow-sm">
+                <!-- Header -->
+                <div class="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-blue-50 transition-colors select-none" @click="skill.expanded = !skill.expanded">
+                  <div class="flex items-center gap-2">
+                    <div v-if="skill.status === 'running'" class="w-2 h-2 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+                    <div v-else-if="skill.status === 'success'" class="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                    <div v-else class="w-2 h-2 bg-red-500 rounded-full"></div>
+                    
+                    <span class="text-xs font-semibold text-blue-900 uppercase tracking-wide">{{ skill.name }}</span>
+                    <span v-if="skill.status === 'running'" class="text-[10px] text-blue-500 animate-pulse">Running...</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-400 font-mono">{{ skill.status === 'success' ? 'COMPLETED' : (skill.status === 'running' ? 'EXECUTING' : 'FAILED') }}</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-blue-400 transform transition-transform duration-200" :class="{ 'rotate-180': skill.expanded }" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                
+                <!-- Details (Collapsible) -->
+                <div v-if="skill.expanded" class="px-3 py-2 border-t border-blue-100 bg-white text-xs font-mono overflow-x-auto max-h-60 custom-scrollbar animate-in slide-in-from-top-1">
+                   <div v-if="skill.details">
+                       <div v-if="skill.details.code" class="mb-3">
+                         <div class="text-gray-400 mb-1 select-none flex items-center gap-1">
+                           <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                           Generated Code
+                         </div>
+                         <pre class="bg-gray-50 p-2 rounded text-gray-700 border border-gray-100">{{ skill.details.code }}</pre>
+                       </div>
+                       <div v-if="skill.details.execution_result" class="mb-1">
+                         <div class="text-gray-400 mb-1 select-none flex items-center gap-1">
+                           <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
+                           Result
+                         </div>
+                         <pre class="text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-100">{{ skill.details.execution_result }}</pre>
+                       </div>
+                       <div v-if="skill.details.type === 'web_search_results'">
+                          <div v-for="(item, i) in skill.details.sources" :key="i" class="mb-3 last:mb-0 p-2 hover:bg-gray-50 rounded transition-colors border border-transparent hover:border-gray-100">
+                             <a :href="item.link" target="_blank" class="text-blue-600 hover:underline font-bold block truncate text-sm mb-1 flex items-center gap-1">
+                               {{ item.title }}
+                               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 opacity-50" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" /><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" /></svg>
+                             </a>
+                             <p class="text-gray-600 leading-snug">{{ item.snippet }}</p>
+                          </div>
+                       </div>
+                   </div>
+                   <div v-else class="text-gray-400 italic py-2 text-center">
+                     Waiting for details...
+                   </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Reasoning Process (DeepSeek Reasoner) -->
+            <div v-if="msg.reasoning" class="mb-4">
+              <details class="group border border-gray-200 bg-gray-50 rounded-lg overflow-hidden" :open="isStreaming && msg.status === 'thinking'">
+                <summary class="px-3 py-2 cursor-pointer bg-gray-100 hover:bg-gray-200 transition-colors flex items-center justify-between text-xs font-semibold text-gray-600 uppercase tracking-wide select-none">
+                  <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-purple-500" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" />
+                    </svg>
+                    Thinking Process
+                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform group-open:rotate-180 transition-transform text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                </summary>
+                <div class="p-3 text-xs font-mono text-gray-600 bg-gray-50/50 whitespace-pre-wrap leading-relaxed border-t border-gray-200">
+                  {{ msg.reasoning }}
+                </div>
+              </details>
+            </div>
+
             <div class="prose prose-sm max-w-none break-words" :class="{ 'text-white prose-invert': msg.role === 'user' }">
               <div class="whitespace-pre-wrap leading-relaxed">{{ msg.content }}</div>
             </div>
@@ -266,6 +341,39 @@
       </footer>
     </main>
 
+    <!-- Debug Panel -->
+    <div v-if="debugMode" class="fixed bottom-20 right-4 w-80 bg-gray-900/90 text-white p-4 rounded-lg shadow-2xl backdrop-blur-sm border border-gray-700 z-50 text-xs font-mono">
+      <div class="flex justify-between items-center mb-2 border-b border-gray-700 pb-2">
+        <span class="font-bold text-green-400">Search Debug Panel</span>
+        <button @click="debugMode = false" class="text-gray-400 hover:text-white">&times;</button>
+      </div>
+      <div v-if="lastSearchInfo" class="space-y-2">
+        <div class="grid grid-cols-[80px_1fr] gap-1">
+          <span class="text-gray-500">Time:</span>
+          <span>{{ lastSearchInfo.timestamp }}</span>
+          
+          <span class="text-gray-500">Provider:</span>
+          <span class="text-blue-400">{{ lastSearchInfo.provider }}</span>
+          
+          <span class="text-gray-500">Latency:</span>
+          <span :class="parseInt(lastSearchInfo.latency) > 1000 ? 'text-red-400' : 'text-green-400'">{{ lastSearchInfo.latency }}</span>
+          
+          <span class="text-gray-500">Status:</span>
+          <span>{{ lastSearchInfo.status }}</span>
+          
+          <span class="text-gray-500">ReqID:</span>
+          <span class="truncate" :title="lastSearchInfo.request_id">{{ lastSearchInfo.request_id }}</span>
+        </div>
+        <div class="mt-2 pt-2 border-t border-gray-700">
+          <span class="text-gray-500 block mb-1">Query:</span>
+          <div class="bg-gray-800 p-2 rounded break-words">{{ lastSearchInfo.query }}</div>
+        </div>
+      </div>
+      <div v-else class="text-gray-500 italic text-center py-4">
+        No search requests recorded yet.
+      </div>
+    </div>
+
     <!-- Modals -->
     <Modal :isOpen="showProfile" @close="showProfile = false">
       <template #title>Student Profile</template>
@@ -311,6 +419,7 @@ const isSidebarOpen = ref(false)
 const messages = ref([])
 const inputQuery = ref('')
 const isStreaming = ref(false)
+const isSending = ref(false) // 新增：发送状态锁
 
 const selectedModel = ref('deepseek')
 const selectedStyle = ref('default')
@@ -391,6 +500,7 @@ async function confirmNewChat() {
     sessions.value.unshift(newSession)
     await switchSession(newSession.id)
     showNewChat.value = false
+    isSidebarOpen.value = false
   } catch (e) {
     console.error('Failed to start session', e)
   } finally {
@@ -533,18 +643,22 @@ async function refreshChat() {
 }
 
 function stopGeneration() {
-  if (ws) {
-    ws.close()
-    ws = null
-  }
+  // 仅停止流式输出，保持WebSocket连接活跃
   isStreaming.value = false
-  setTimeout(connectWS, 500)
+  // 不清除WebSocket连接，保持持久连接
 }
 
 // --- WebSocket & Messaging ---
 
 function connectWS() {
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
+  // 清理已失效的连接
+  if (ws) {
+    if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      ws = null
+    } else if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      return
+    }
+  }
 
   const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://'
   const url = `${protocol}${location.host}/api/v1/chat/ws`
@@ -569,6 +683,17 @@ function connectWS() {
     wsConnected.value = false
     console.log('WS Closed')
     ws = null 
+    // 自动重连机制
+    if (isStreaming.value) {
+      setTimeout(connectWS, 1000)
+    }
+  }
+  
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error)
+    wsConnected.value = false
+    // 错误时也尝试重连
+    setTimeout(connectWS, 2000)
   }
 }
 
@@ -600,44 +725,53 @@ async function waitForConnection() {
 }
 
 async function sendMessage() {
-  if (!inputQuery.value.trim() || isStreaming.value) return
+  if (!inputQuery.value.trim() || isStreaming.value || isSending.value) return
   
-  if (!currentSessionId.value) {
-    await createDefaultSession()
-  }
-
-  const query = inputQuery.value
+  isSending.value = true
   
-  messages.value.push({
-    role: 'user',
-    content: query
-  })
-  
-  inputQuery.value = ''
-  isStreaming.value = true
-  
-  messages.value.push({
-    role: 'assistant',
-    content: '',
-    sources: []
-  })
-  
-  scrollToBottom()
-  
-  const connected = await waitForConnection()
-  
-  if (connected) {
-    const payload = {
-      query: query,
-      session_id: currentSessionId.value,
-      current_path: '/ui/chat',
-      model: selectedModel.value,
-      prompt_style: selectedStyle.value
+  try {
+    if (!currentSessionId.value) {
+      await createDefaultSession()
     }
-    ws.send(JSON.stringify(payload))
-  } else {
-     messages.value[messages.value.length - 1].content = "Error: Connection lost or failed to connect."
-     isStreaming.value = false
+
+    const query = inputQuery.value
+    
+    messages.value.push({
+      role: 'user',
+      content: query
+    })
+    
+    inputQuery.value = ''
+    isStreaming.value = true
+    
+    messages.value.push({
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      sources: [],
+      skills: [],
+      status: null
+    })
+    
+    scrollToBottom()
+    
+    const connected = await waitForConnection()
+    
+    if (connected) {
+      const payload = {
+        query: query,
+        session_id: currentSessionId.value,
+        current_path: '/ui/chat',
+        model: selectedModel.value,
+        prompt_style: selectedStyle.value
+      }
+      ws.send(JSON.stringify(payload))
+    } else {
+       messages.value[messages.value.length - 1].content = "Error: Connection lost or failed to connect."
+       isStreaming.value = false
+    }
+  } finally {
+    isSending.value = false
   }
 }
 
@@ -650,11 +784,51 @@ function handleWSMessage(data) {
       currentMsg.content += data.content
       scrollToBottom()
       break
+    case 'reasoning':
+      if (!currentMsg.reasoning) currentMsg.reasoning = ''
+      currentMsg.reasoning += data.content
+      // Auto-set status to thinking if receiving reasoning
+      currentMsg.status = 'thinking'
+      scrollToBottom()
+      break
     case 'sources':
       currentMsg.sources = data.data
       break
+    case 'skill_start':
+      if (!currentMsg.skills) currentMsg.skills = []
+      currentMsg.skills.push({
+        name: data.skill,
+        description: data.description,
+        status: 'running',
+        details: null,
+        expanded: true // Auto-expand when starting to show progress
+      })
+      scrollToBottom()
+      break
+    case 'skill_end':
+      if (currentMsg.skills && currentMsg.skills.length > 0) {
+        // Find the running skill
+        const skill = currentMsg.skills.slice().reverse().find(s => s.name === data.skill && s.status === 'running')
+        if (skill) {
+          skill.status = data.status
+          skill.details = data.details
+          // Collapse on success to save space, keep expanded on error?
+          if (data.status === 'success') {
+             skill.expanded = false
+          }
+        }
+      }
+      break
+    case 'status':
+      currentMsg.status = data.content
+      break
     case 'end':
       isStreaming.value = false
+      currentMsg.status = null
+      // 清除任何可能的thinking状态
+      if (currentMsg.reasoning) {
+        currentMsg.reasoning = ''
+      }
       break
     case 'error':
       currentMsg.content += `\n[Error: ${data.content}]`

@@ -43,6 +43,29 @@ async def truncate_history(session_id: str, request: TruncateRequest):
         raise HTTPException(status_code=400, detail="Invalid index or session")
     return {"status": "success"}
 
+# --- Learning Session API ---
+
+@router.post("/session/start", response_model=SessionResponse)
+async def start_learning_session(request: StartSessionRequest):
+    """
+    Start a new Learning or Preview session.
+    """
+    user_id = "student_001"
+    return SessionManager.create_session(request, user_id)
+
+@router.get("/session/{session_id}/preview", response_model=PreviewStatusResponse)
+async def get_session_preview(session_id: str):
+    """
+    Get the status of a video preview generation task.
+    """
+    status = SessionManager.get_preview_status(session_id)
+    if not status:
+        # Return a default status or 404
+        # Since the frontend polls this, 404 might break the poller if not handled gracefully.
+        # But SessionManager.get_preview_status returns None if not found.
+        raise HTTPException(status_code=404, detail="Preview task not found")
+    return status
+
 # Dependency for QAService (Singleton or Per-Request)
 def get_qa_service():
     return QAService()

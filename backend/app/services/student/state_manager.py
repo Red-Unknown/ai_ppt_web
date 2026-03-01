@@ -1,8 +1,12 @@
 import json
 import uuid
+import logging
+import redis
 from typing import Optional, Dict, List
 from datetime import datetime
 from backend.app.schemas.student import StudentProfile, StudentState, InteractionMode, LearningStyle
+
+logger = logging.getLogger(__name__)
 
 # Mock Redis Client for development
 class MockRedis:
@@ -19,12 +23,51 @@ class MockRedis:
         if key in self.data:
             del self.data[key]
 
-# Singleton instance
-redis_client = MockRedis()
+    def ping(self):
+        return True
+
+# Initialize Redis with Fallback
+try:
+    # Attempt to connect to local Redis with short timeout
+    # In production, host/port should come from settings
+    real_redis = redis.Redis(host='localhost', port=6379, db=0, socket_connect_timeout=1, decode_responses=True)
+    real_redis.ping()
+    redis_client = real_redis
+    logger.info("Connected to Real Redis.")
+except Exception as e:
+    logger.warning(f"Redis connection failed: {e}. Using MockRedis (In-Memory Fallback).")
+    redis_client = MockRedis()
+
+# Wrapper for robust Redis operations
+class SafeRedis:
+    def __init__(self, client):
+        self.client = client
+
+    def get(self, key: str) -> Optional[str]:
+        try:
+            return self.client.get(key)
+        except Exception as e:
+            logger.error(f"Redis GET failed: {e}")
+            return None
+
+    def set(self, key: str, value: str, ex: Optional[int] = None):
+        try:
+            self.client.set(key, value, ex)
+        except Exception as e:
+            logger.error(f"Redis SET failed: {e}")
+
+    def delete(self, key: str):
+        try:
+            self.client.delete(key)
+        except Exception as e:
+            logger.error(f"Redis DELETE failed: {e}")
+
+# Replace global client with safe wrapper
+redis_client = SafeRedis(redis_client)
 
 class StudentStateManager:
     """
-    Manages student profiles and session states using Redis (Mocked).
+    Manages student profiles and session states using Redis (with in-memory fallback).
     """
     
     PROFILE_PREFIX = "student:profile:"
@@ -114,7 +157,11 @@ class StudentStateManager:
         """Add a message to the session history."""
         key = cls._get_history_key(session_id)
         data = redis_client.get(key)
-        history = json.loads(data) if data else []
+        try:
+            history = json.loads(data) if data else []
+        except json.JSONDecodeError:
+            logger.error(f"Corrupted history data for session {session_id}. Resetting.")
+            history = []
         
         history.append({
             "role": role,
@@ -122,9 +169,9 @@ class StudentStateManager:
             "timestamp": datetime.now().isoformat()
         })
         
-        # Limit history size to last 50 messages to prevent bloat
-        if len(history) > 50:
-            history = history[-50:]
+        # Limit history size to last 100 messages to prevent bloat
+        if len(history) > 100:
+            history = history[-100:]
             
         redis_client.set(key, json.dumps(history))
 
@@ -136,7 +183,12 @@ class StudentStateManager:
         if not data:
             return []
             
-        history = json.loads(data)
+        try:
+            history = json.loads(data)
+        except json.JSONDecodeError:
+            logger.error(f"Corrupted history data for session {session_id}. Returning empty.")
+            return []
+            
         return history[-limit:]
 
     @classmethod
