@@ -4,6 +4,10 @@ from typing import Dict, Any, List, Optional
 import logging
 import os
 from bs4 import BeautifulSoup
+from backend.app.core.context import session_id_ctx, request_id_ctx
+from backend.app.services.session.manager import SessionManager
+from backend.app.core.rate_limiter import tavily_limiter
+
 try:
     import html2text
 except ImportError:
@@ -33,6 +37,7 @@ class WebSearchSkill(BaseSkill):
     def __init__(self):
         self.search_tool = None
         self.engine = "none"
+        self._session = None
         
         # Priority 1: Tavily (Better for RAG/LLM)
         if HAS_TAVILY and os.environ.get("TAVILY_API_KEY"):
@@ -88,6 +93,13 @@ class WebSearchSkill(BaseSkill):
         
         return query
 
+    async def _get_session(self):
+        if self._session is None or self._session.closed:
+            # Use TCPConnector with DNS caching (300s) and large pool (limit=50)
+            connector = aiohttp.TCPConnector(limit=50, ttl_dns_cache=300)
+            self._session = aiohttp.ClientSession(connector=connector)
+        return self._session
+
     async def _scrape_content(self, url: str) -> str:
         """
         Scrape content from a URL using aiohttp and BeautifulSoup.
@@ -98,27 +110,27 @@ class WebSearchSkill(BaseSkill):
         
         for attempt in range(retries):
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url, timeout=10) as response:
-                        if response.status == 200:
-                            html = await response.text()
-                            soup = BeautifulSoup(html, 'html.parser')
+                session = await self._get_session()
+                async with session.get(url, timeout=15) as response:
+                    if response.status == 200:
+                        html = await response.text()
+                        soup = BeautifulSoup(html, 'html.parser')
+                        
+                        # Remove script and style elements
+                        for script in soup(["script", "style"]):
+                            script.decompose()
                             
-                            # Remove script and style elements
-                            for script in soup(["script", "style"]):
-                                script.decompose()
-                                
-                            # Convert to markdown using html2text for cleaner LLM input
-                            h = html2text.HTML2Text()
-                            h.ignore_links = True
-                            h.ignore_images = True
-                            markdown_text = h.handle(html)
-                            
-                            # Limit length
-                            return markdown_text[:2000]
-                        else:
-                            if attempt == retries - 1:
-                                return f"Failed to retrieve content (Status: {response.status})"
+                        # Convert to markdown using html2text for cleaner LLM input
+                        h = html2text.HTML2Text()
+                        h.ignore_links = True
+                        h.ignore_images = True
+                        markdown_text = h.handle(html)
+                        
+                        # Limit length
+                        return markdown_text[:2000]
+                    else:
+                        if attempt == retries - 1:
+                            return f"Failed to retrieve content (Status: {response.status})"
             except Exception as e:
                 if attempt == retries - 1:
                     return f"Scraping error: {str(e)}"
@@ -131,12 +143,36 @@ class WebSearchSkill(BaseSkill):
 
     async def execute(self, query: str, **kwargs) -> Dict[str, Any]:
         """
-        Execute web search with retry mechanism.
+        Execute web search with retry mechanism and strict session limit.
         """
         import time
         start_time = time.time()
-        request_id = kwargs.get("request_id", "unknown")
+        # Use context request_id if available, fallback to kwargs
+        request_id = request_id_ctx.get() or kwargs.get("request_id", "unknown")
         
+        # --- Strict Search Limit Check (Atomic) ---
+        session_id = session_id_ctx.get()
+        if not session_id:
+            logger.error(f"[ReqID:{request_id}] No session_id found in context. Blocking search for safety.")
+            return {
+                "status": "success",  # Return success to stop agent from retrying
+                "content": "System Error: Session context missing. Search is disabled for security reasons. \n\nINSTRUCTION: You MUST stop searching immediately and answer based on your existing knowledge.",
+                "details": {"error": "Missing Session ID"}
+            }
+
+        # Try to acquire the lock. If False, it means search was already used.
+        if not SessionManager.try_acquire_search_quota(session_id):
+            logger.warning(f"[ReqID:{request_id}] Search quota exceeded for session {session_id}.")
+            return {
+                "status": "success",  # Return success to stop agent from retrying
+                "content": "System Notification: Web search quota for this session is exhausted (Limit: 1). \n\nINSTRUCTION: You MUST stop searching immediately. Use the information collected from the previous search to answer the user's question. If the information is insufficient, state what is missing and append '如需更详细的内容请继续讨论' to the end of your response.",
+                "details": {
+                    "error_message": "Search limit reached",
+                    "error_details": "Single session search limit exceeded.",
+                    "type": "limit_exceeded"
+                }
+            }
+
         process_steps = []
         process_steps.append(f"Received query: {query}")
         
@@ -166,7 +202,8 @@ class WebSearchSkill(BaseSkill):
                 try:
                     if self.engine == "tavily":
                         # Tavily returns a list of dicts directly via invoke
-                        results = await self.search_tool.ainvoke(optimized_query)
+                        async with tavily_limiter:
+                            results = await self.search_tool.ainvoke(optimized_query)
                         structured_results = [
                             {
                                 "title": res.get("url", "Tavily Result"), 
@@ -226,16 +263,30 @@ class WebSearchSkill(BaseSkill):
 
             process_steps.append(f"Found {len(structured_results)} results.")
 
-            # Deep Scraping Logic (Phase 3)
-            # Only scrape the top result if snippets are very short (< 100 chars) or if it's a noun explanation
-            # to provide more context.
-            if structured_results and len(structured_results[0]['snippet']) < 150:
-                 process_steps.append("Top result snippet is short. Attempting deep scraping...")
-                 top_url = structured_results[0]['link']
-                 if top_url:
-                     scraped_content = await self._scrape_content(top_url)
-                     structured_results[0]['scraped_content'] = scraped_content
-                     process_steps.append(f"Scraped content from {top_url} ({len(scraped_content)} chars).")
+            # Deep Scraping Logic (Phase 3) - Parallel with 3s timeout
+            process_steps.append("Starting parallel deep scraping for top results...")
+            
+            async def scrape_task(res):
+                url = res.get('link')
+                if url:
+                    try:
+                        content = await self._scrape_content(url)
+                        res['scraped_content'] = content
+                        return True
+                    except Exception:
+                        return False
+                return False
+
+            # Limit to top 5
+            tasks = [scrape_task(res) for res in structured_results[:5]]
+            
+            try:
+                await asyncio.wait_for(asyncio.gather(*tasks), timeout=3.0)
+                process_steps.append("Parallel scraping completed.")
+            except asyncio.TimeoutError:
+                process_steps.append("Parallel scraping timed out (partial results kept).")
+            except Exception as e:
+                process_steps.append(f"Parallel scraping error: {e}")
 
             # Summarize content (simple concatenation for now, LLM will process later)
             summary = "\n".join([f"[{i+1}] {res['snippet']} { '(Full Content Available)' if 'scraped_content' in res else ''}" for i, res in enumerate(structured_results)])

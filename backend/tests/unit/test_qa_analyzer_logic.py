@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
 # Add project root
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 # Mock settings before importing analyzer
 with patch('backend.app.core.config.settings') as mock_settings:
@@ -13,12 +13,12 @@ with patch('backend.app.core.config.settings') as mock_settings:
     mock_settings.DEEPSEEK_BASE_URL = "http://mock"
     mock_settings.DEEPSEEK_MODEL = "deepseek-chat"
     
-    from backend.app.services.qa.analyzer import QAAnalyzer
+    from backend.app.services.qa.analysis.intent import QAAnalyzer
 
 @pytest.mark.asyncio
 async def test_analyzer_classification():
     # Mock ChatOpenAI
-    with patch('backend.app.services.qa.analyzer.ChatOpenAI') as MockLLM:
+    with patch('backend.app.services.qa.analysis.intent.ChatOpenAI') as MockLLM:
         analyzer = QAAnalyzer()
         # Mock the chain
         analyzer.chain = AsyncMock()
@@ -37,7 +37,7 @@ async def test_analyzer_classification():
 
 @pytest.mark.asyncio
 async def test_analyzer_decomposition():
-    with patch('backend.app.services.qa.analyzer.ChatOpenAI'):
+    with patch('backend.app.services.qa.analysis.intent.ChatOpenAI'):
         analyzer = QAAnalyzer()
         analyzer.decomposition_chain = AsyncMock()
         # Mock JSON response

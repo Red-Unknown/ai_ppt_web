@@ -78,57 +78,91 @@ class ReActAgent:
                 yield json.dumps({"type": "iteration", "iteration": iteration})
                 
                 # Call LLM
-                # Using ainvoke for simplicity and robustness in tool calling
-                # Streaming tool calls is complex, so we stream the 'thought' after generation 
-                # or if we switch to astream later.
+                # Use astream instead of ainvoke to enable token-level streaming
                 start_llm_time = time.time()
-                response_msg = await self.llm_with_tools.ainvoke(messages)
+                
+                # Stream handling variables
+                accumulated_content = ""
+                tool_calls_chunks = []
+                
+                # Stream the LLM response
+                async for chunk in self.llm_with_tools.astream(messages):
+                    # Handle content (thought/answer)
+                    if chunk.content:
+                        accumulated_content += chunk.content
+                        # We yield thought/content as it comes if no tools are being built yet
+                        # But ReAct usually outputs thought -> tool_call in one go or separate
+                        # For now, we buffer thought until we know if it's a tool call or final answer?
+                        # Actually, we can stream thought immediately.
+                        yield json.dumps({"type": "thought_stream", "content": chunk.content})
+
+                    # Handle tool calls accumulation
+                    if getattr(chunk, "tool_call_chunks", None):
+                        for tool_chunk in chunk.tool_call_chunks:
+                            if len(tool_calls_chunks) <= tool_chunk["index"]:
+                                tool_calls_chunks.append({
+                                    "name": "", 
+                                    "args": "", 
+                                    "id": "",
+                                    "index": tool_chunk["index"]
+                                })
+                            
+                            tc = tool_calls_chunks[tool_chunk["index"]]
+                            if tool_chunk.get("name"):
+                                tc["name"] += tool_chunk["name"]
+                            if tool_chunk.get("args"):
+                                tc["args"] += tool_chunk["args"]
+                            if tool_chunk.get("id"):
+                                tc["id"] += tool_chunk["id"]
+                
                 llm_duration = time.time() - start_llm_time
                 
-                # Log Cache Usage if available (DeepSeek)
-                usage_metadata = {}
-                if hasattr(response_msg, "response_metadata"):
-                    usage_metadata = response_msg.response_metadata.get("usage", {})
-                elif hasattr(response_msg, "additional_kwargs"):
-                    # Fallback for older LangChain versions or different providers
-                    usage_metadata = response_msg.additional_kwargs.get("usage", {})
+                # Reconstruct full message for history
+                response_msg = AIMessage(content=accumulated_content)
                 
-                if usage_metadata:
-                    cache_hit = usage_metadata.get("prompt_cache_hit_tokens", 0)
-                    cache_miss = usage_metadata.get("prompt_cache_miss_tokens", 0)
-                    total_tokens = usage_metadata.get("total_tokens", 0)
-                    logger.info(f"LLM Usage - Hit: {cache_hit}, Miss: {cache_miss}, Total: {total_tokens}")
-                    yield json.dumps({
-                        "type": "usage", 
-                        "hit_tokens": cache_hit, 
-                        "miss_tokens": cache_miss,
-                        "total_tokens": total_tokens
+                # Reconstruct tool calls
+                tool_calls = []
+                for tc in tool_calls_chunks:
+                    try:
+                        args = json.loads(tc["args"])
+                    except json.JSONDecodeError:
+                        args = {} # Should handle partial JSON if needed, but usually complete here
+                    
+                    tool_calls.append({
+                        "name": tc["name"],
+                        "args": args,
+                        "id": tc["id"]
                     })
+                    
+                    # Attach to message for LangChain compatibility
+                    if not hasattr(response_msg, "tool_calls"):
+                        response_msg.tool_calls = []
+                    
+                    response_msg.tool_calls.append({
+                        "name": tc["name"],
+                        "args": args,
+                        "id": tc["id"]
+                    })
+                
+                # Log Cache Usage if available (DeepSeek)
+                # Note: Usage might not be available in chunks easily without aggregation
+                # Skipping usage log for stream or need to check last chunk
+
 
                 # Append the assistant's response to history
                 messages.append(response_msg)
                 
                 # Safe tool call extraction
-                tool_calls = getattr(response_msg, "tool_calls", [])
-                if not tool_calls and hasattr(response_msg, "additional_kwargs"):
-                    raw_tool_calls = response_msg.additional_kwargs.get("tool_calls", [])
-                    if raw_tool_calls:
-                        # Normalize OpenAI format to LangChain tool_call dict format
-                        tool_calls = []
-                        for tc in raw_tool_calls:
-                            function_data = tc.get("function", {})
-                            tool_calls.append({
-                                "name": function_data.get("name"),
-                                "args": json.loads(function_data.get("arguments", "{}")),
-                                "id": tc.get("id")
-                            })
-
+                tool_calls = []
+                for tc in getattr(response_msg, "tool_calls", []):
+                    tool_calls.append({
+                        "name": tc["name"],
+                        "args": tc["args"],
+                        "id": tc["id"]
+                    })
+                
                 # Check for tool calls
                 if tool_calls:
-                    # If there is content (Thought), yield it
-                    if response_msg.content:
-                        yield json.dumps({"type": "thought", "content": response_msg.content})
-                    
                     # Execute Tools
                     for tool_call in tool_calls:
                         func_name = tool_call["name"]
@@ -226,12 +260,8 @@ class ReActAgent:
                 else:
                     # No tool calls -> Final Answer
                     final_answer_reached = True
-                    # Yield the final answer
-                    # Note: If content is empty, it's an issue, but usually it's not.
-                    if response_msg.content:
-                        yield json.dumps({"type": "answer", "content": response_msg.content})
-                    else:
-                        yield json.dumps({"type": "answer", "content": "I'm not sure how to answer that."})
+                    # Yield the final answer (already streamed via thought_stream)
+                    pass
             
             if iteration >= self.max_iterations and not final_answer_reached:
                 yield json.dumps({"type": "error", "content": "Max iterations reached without a final answer."})

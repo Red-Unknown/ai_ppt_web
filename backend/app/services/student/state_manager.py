@@ -91,7 +91,7 @@ class StudentStateManager:
     def get_profile(cls, user_id: str) -> Optional[StudentProfile]:
         data = redis_client.get(cls._get_profile_key(user_id))
         if data:
-            return StudentProfile.parse_raw(data)
+            return StudentProfile.model_validate_json(data)
         return None
 
     @classmethod
@@ -100,7 +100,7 @@ class StudentStateManager:
         existing_data = redis_client.get(key)
         
         if existing_data:
-            current_profile = StudentProfile.parse_raw(existing_data)
+            current_profile = StudentProfile.model_validate_json(existing_data)
             updated_data = current_profile.dict()
             updated_data.update({k: v for k, v in profile_data.items() if v is not None})
             new_profile = StudentProfile(**updated_data)
@@ -113,14 +113,14 @@ class StudentStateManager:
                 interaction_mode=profile_data.get("interaction_mode", InteractionMode.STANDARD)
             )
             
-        redis_client.set(key, new_profile.json())
+        redis_client.set(key, new_profile.model_dump_json())
         return new_profile
 
     @classmethod
     def get_state(cls, session_id: str) -> Optional[StudentState]:
         data = redis_client.get(cls._get_state_key(session_id))
         if data:
-            return StudentState.parse_raw(data)
+            return StudentState.model_validate_json(data)
         return None
 
     @classmethod
@@ -132,7 +132,7 @@ class StudentStateManager:
             last_interaction_time=datetime.now(),
             last_qa_query=None
         )
-        redis_client.set(cls._get_state_key(session_id), state.json())
+        redis_client.set(cls._get_state_key(session_id), state.model_dump_json())
         return state
 
     @classmethod
@@ -141,7 +141,7 @@ class StudentStateManager:
         if state:
             state.last_qa_query = query
             state.last_interaction_time = datetime.now()
-            redis_client.set(cls._get_state_key(session_id), state.json())
+            redis_client.set(cls._get_state_key(session_id), state.model_dump_json())
 
     @classmethod
     def increment_confusion(cls, session_id: str) -> int:
@@ -149,7 +149,7 @@ class StudentStateManager:
         if state:
             state.confusion_count += 1
             state.last_interaction_time = datetime.now()
-            redis_client.set(cls._get_state_key(session_id), state.json())
+            redis_client.set(cls._get_state_key(session_id), state.model_dump_json())
             return state.confusion_count
         return 0
 
@@ -159,7 +159,7 @@ class StudentStateManager:
         if state:
             state.confusion_count = 0
             state.last_interaction_time = datetime.now()
-            redis_client.set(cls._get_state_key(session_id), state.json())
+            redis_client.set(cls._get_state_key(session_id), state.model_dump_json())
 
     @classmethod
     def add_history(cls, session_id: str, role: str, content: str):

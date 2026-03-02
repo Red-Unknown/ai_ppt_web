@@ -37,10 +37,12 @@
     │   │   │   ├── qa/
     │   │   │   └── ...
     │   │   └── workers/    # Celery 任务定义
-    │   ├── tests/          # 单元测试 & 集成测试
-    │   │   ├── test_websocket_chat.py
-    │   │   ├── test_sse_chat.py
-    │   │   └── ...
+    │   ├── tests/          # 测试目录 (Refactored)
+    │   │   ├── unit/       # 单元测试 (No External Deps)
+    │   │   ├── integration/# 集成测试 (DB/API/External)
+    │   │   ├── e2e/        # 端到端测试 (Full System)
+    │   │   ├── conftest.py # Pytest Configuration
+    │   │   └── pytest.ini  # Pytest Settings
     │   ├── main.py         # 启动入口
     │   └── alembic/        # 数据库迁移脚本
     ├── frontend/           # 前端工程 (Vue3)

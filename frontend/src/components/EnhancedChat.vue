@@ -277,19 +277,23 @@
 
             <!-- Reasoning Process (DeepSeek Reasoner) -->
             <div v-if="msg.reasoning" class="mb-4">
-              <details class="group border border-gray-200 bg-gray-50 rounded-lg overflow-hidden" :open="isStreaming && msg.status === 'thinking'">
-                <summary class="px-3 py-2 cursor-pointer bg-gray-100 hover:bg-gray-200 transition-colors flex items-center justify-between text-xs font-semibold text-gray-600 uppercase tracking-wide select-none">
+              <details class="group border border-gray-200 bg-gray-50 rounded-lg overflow-hidden transition-all duration-200" :open="msg.isReasoningOpen">
+                <summary 
+                  @click.prevent="msg.isReasoningOpen = !msg.isReasoningOpen"
+                  class="px-3 py-2 cursor-pointer bg-gray-100 hover:bg-gray-200 transition-colors flex items-center justify-between text-xs font-semibold text-gray-600 uppercase tracking-wide select-none"
+                >
                   <div class="flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-purple-500" viewBox="0 0 20 20" fill="currentColor">
                       <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" />
                     </svg>
                     Thinking Process
+                    <span v-if="!msg.isReasoningOpen" class="text-gray-400 text-[10px] ml-2 font-normal lowercase">(collapsed)</span>
                   </div>
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform group-open:rotate-180 transition-transform text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform duration-200" :class="{ 'rotate-180': msg.isReasoningOpen }" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
                   </svg>
                 </summary>
-                <div class="p-3 text-xs font-mono text-gray-600 bg-gray-50/50 whitespace-pre-wrap leading-relaxed border-t border-gray-200">
+                <div class="p-3 text-xs font-mono text-gray-600 bg-gray-50/50 whitespace-pre-wrap leading-relaxed border-t border-gray-200 animate-in slide-in-from-top-2 duration-200" style="min-height: 120px; max-height: 400px; overflow-y: auto;">
                   {{ msg.reasoning }}
                 </div>
               </details>
@@ -495,6 +499,10 @@ const isSending = ref(false) // 新增：发送状态锁
 
 const selectedModel = ref('deepseek')
 const selectedStyle = ref('default')
+
+// Debug
+const debugMode = ref(false)
+const lastSearchInfo = ref(null)
 
 // Modals
 const showProfile = ref(false)
@@ -932,12 +940,24 @@ function handleWSMessage(data) {
       break
 
     case 'reasoning':
-      if (!currentMsg.reasoning) currentMsg.reasoning = ''
+      if (!currentMsg.reasoning) {
+        currentMsg.reasoning = ''
+        currentMsg.isReasoningOpen = true
+      }
       currentMsg.reasoning += data.content
       currentMsg.status = 'thinking'
       scrollToBottom()
       break
     
+    case 'reasoning_end':
+      setTimeout(() => {
+        if (currentMsg) {
+          currentMsg.isReasoningOpen = false
+          currentMsg.status = 'reasoning_complete'
+        }
+      }, 500)
+      break
+
     case 'sources':
       currentMsg.sources = data.data
       break
@@ -982,6 +1002,14 @@ function debounce(func, wait, immediate) {
 const handleEnterKey = debounce(() => {
   sendMessage()
 }, 300, true)
+
+// Expose for testing
+defineExpose({
+  handleWSMessage,
+  messages,
+  debugMode,
+  lastSearchInfo
+})
 </script>
 
 <style scoped>
