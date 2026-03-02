@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 # Add project root to path
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+# sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 from backend.app.services.qa.retrieval.tree_retriever import TreeStructureRetriever
 

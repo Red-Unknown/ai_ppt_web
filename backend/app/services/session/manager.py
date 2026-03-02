@@ -29,7 +29,9 @@ class SessionManager:
             "user_id": user_id,
             "title": "New Chat",
             "updated_at": now,
-            "history": []
+            "history": [],
+            "cache": {},          # Single Chat Cache: {fingerprint: docs}
+            "search_used": False  # Web Search Limit Flag
         }
         return session_id
 
@@ -84,6 +86,93 @@ class SessionManager:
         if role == "user" and len(session["history"]) <= 2:
             # Simple heuristic: first 20 chars
             session["title"] = content[:30] + "..." if len(content) > 30 else content
+
+    @staticmethod
+    def reset_search_quota(session_id: str):
+        """Reset search quota for a new turn (Q&A pair)."""
+        session = _CHAT_SESSIONS.get(session_id)
+        if session:
+            session["search_used"] = False
+
+    @staticmethod
+    def try_acquire_search_quota(session_id: str) -> bool:
+        session = _CHAT_SESSIONS.get(session_id)
+        if not session:
+            return False
+        # If 'search_used' key is missing, default to False (unused)
+        if session.get("search_used", False):
+            return False
+        session["search_used"] = True
+        return True
+
+    @staticmethod
+    def is_search_used(session_id: str) -> bool:
+        session = _CHAT_SESSIONS.get(session_id)
+        if not session:
+            return False
+        return session.get("search_used", False)
+    @staticmethod
+    def calculate_fingerprint(query: str) -> str:
+        """Calculate MD5 fingerprint for query normalization."""
+        import hashlib
+        normalized = query.lower().strip()
+        return hashlib.md5(normalized.encode('utf-8')).hexdigest()
+
+    @staticmethod
+    def get_cached_docs(session_id: str, query: str) -> Optional[list]:
+        """Retrieve cached documents for a query fingerprint."""
+        session = _CHAT_SESSIONS.get(session_id)
+        if not session:
+            return None
+        
+        fingerprint = SessionManager.calculate_fingerprint(query)
+        return session.get("cache", {}).get(fingerprint)
+
+    @staticmethod
+    def cache_docs(session_id: str, query: str, docs: list):
+        """Cache documents for a query."""
+        session = _CHAT_SESSIONS.get(session_id)
+        if session:
+            fingerprint = SessionManager.calculate_fingerprint(query)
+            if "cache" not in session:
+                session["cache"] = {}
+            session["cache"][fingerprint] = docs
+
+    @staticmethod
+    def try_acquire_search_quota(session_id: str) -> bool:
+        """
+        Atomic check-and-set for search quota.
+        Returns True if quota was acquired (search allowed), False otherwise.
+        """
+        # In a real Redis/DB scenario, this should be a Lua script or transaction.
+        # Here we use a simple lock-like approach for the in-memory dict.
+        # Since standard dict operations in Python (CPython) are atomic for single items,
+        # we can check and set. But for strict correctness in multi-threaded envs, 
+        # we might need a lock. However, FastAPI is async, running in single thread loop 
+        # unless using threads.
+        
+        session = _CHAT_SESSIONS.get(session_id)
+        if not session:
+            return False
+            
+        if session.get("search_used", False):
+            return False
+            
+        session["search_used"] = True
+        return True
+
+    @staticmethod
+    def is_search_used(session_id: str) -> bool:
+        """Check if web search has been used in this session."""
+        session = _CHAT_SESSIONS.get(session_id)
+        return session.get("search_used", False) if session else False
+
+    @staticmethod
+    def mark_search_used(session_id: str):
+        """Mark web search as used for this session."""
+        session = _CHAT_SESSIONS.get(session_id)
+        if session:
+            session["search_used"] = True
 
     @staticmethod
     def truncate_history(session_id: str, index: int) -> bool:

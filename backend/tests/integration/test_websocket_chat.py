@@ -9,13 +9,13 @@ from typing import AsyncGenerator, List
 os.environ["OPENAI_API_KEY"] = "sk-mock-key-for-testing"
 
 # Add project root and backend to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from backend.main import app
 # Import from 'app' directly because backend/main.py uses 'from app...'
 # and we added backend directory to sys.path
-from app.api.v1.chat import get_qa_service
+from backend.app.api.v1.chat import get_qa_service
 from backend.app.schemas.qa import ChatRequest
 
 client = TestClient(app)

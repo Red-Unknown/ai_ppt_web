@@ -6,10 +6,10 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add project root
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from backend.app.utils.sandbox import SafeCodeExecutor, ExecutionError, SecurityError
-from backend.app.services.qa.math_solver import MathSolver
+from backend.app.services.qa.tools.math_solver import MathSolver
 
 def test_sandbox_simple_math():
     code = "result = 2 + 2"
@@ -43,7 +43,7 @@ async def test_math_solver_flow():
         mock_settings.DEEPSEEK_MODEL = "deepseek"
         
         # Patch ChatOpenAI within the module where it's used
-        with patch('backend.app.services.qa.math_solver.ChatOpenAI') as MockLLM:
+        with patch('backend.app.services.qa.tools.math_solver.ChatOpenAI') as MockLLM:
             solver = MathSolver()
             
             # Mock Code Gen Chain
@@ -71,7 +71,7 @@ async def test_multistep_math_problem():
         mock_settings.DEEPSEEK_BASE_URL = "http://mock"
         mock_settings.DEEPSEEK_MODEL = "deepseek"
         
-        with patch('backend.app.services.qa.math_solver.ChatOpenAI') as MockLLM:
+        with patch('backend.app.services.qa.tools.math_solver.ChatOpenAI') as MockLLM:
             solver = MathSolver()
             
             # Mock Code Gen Chain: Simulating the LLM output for a multi-step problem

@@ -163,3 +163,20 @@ async def reload_config(qa_service: QAService = Depends(get_qa_service)):
         return {"status": "success", "message": "Configuration reloaded."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/sse")
+async def sse_endpoint(
+    query: str, 
+    session_id: Optional[str] = None, 
+    qa_service: QAService = Depends(get_qa_service)
+):
+    """
+    Server-Sent Events Endpoint for Chat.
+    """
+    request = ChatRequest(query=query, session_id=session_id)
+    
+    async def sse_generator():
+        async for chunk in qa_service.stream_answer_question(request, user_id="student_001"):
+            yield f"data: {chunk}\n\n"
+            
+    return StreamingResponse(sse_generator(), media_type="text/event-stream")
