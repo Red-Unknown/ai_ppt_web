@@ -1,5 +1,12 @@
 <template>
   <div class="flex h-screen bg-gray-50 font-sans text-gray-900">
+    <!-- Toast Notification -->
+    <div v-if="showToast" class="fixed top-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in fade-in slide-in-from-top-4 flex items-center gap-2 pointer-events-none">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+      </svg>
+      {{ toastMessage }}
+    </div>
     <!-- Sidebar -->
     <aside 
       :class="['fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-200 flex flex-col transition-transform duration-300 ease-in-out md:relative md:translate-x-0',
@@ -39,7 +46,7 @@
         </button>
       </div>
       
-      <div class="p-4 border-t border-gray-200 bg-gray-50">
+      <div class="p-4 border-t border-gray-200 bg-gray-50 space-y-2">
         <ModernButton 
           block 
           variant="outline" 
@@ -53,6 +60,21 @@
             </svg>
           </template>
           Student Profile
+        </ModernButton>
+        <ModernButton 
+          block 
+          variant="ghost" 
+          size="sm" 
+          @click="showSettings = true"
+          aria-label="Settings"
+        >
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </template>
+          Settings
         </ModernButton>
       </div>
     </aside>
@@ -114,9 +136,18 @@
       </div>
 
       <!-- Messages Area -->
-      <div class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth" ref="messagesContainer">
-        <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full text-gray-400 select-none">
-          <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+      <div class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth relative" ref="messagesContainer">
+        
+        <!-- Loading State Overlay -->
+        <div v-if="isSessionLoading" class="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex items-center justify-center transition-opacity duration-300">
+          <div class="flex flex-col items-center gap-3">
+             <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+             <p class="text-sm font-medium text-gray-500 animate-pulse">Loading session...</p>
+          </div>
+        </div>
+
+        <div v-if="!isSessionLoading && messages.length === 0" class="flex flex-col items-center justify-center h-full text-gray-400 select-none animate-in fade-in duration-500">
+          <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6 shadow-inner">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
             </svg>
@@ -135,7 +166,53 @@
           </div>
         </div>
 
-        <div v-for="(msg, index) in messages" :key="index" :class="['flex w-full group items-start gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300', msg.role === 'user' ? 'flex-row-reverse' : '']">
+        <!-- Session Thinking Process & Evaluation -->
+        <div v-if="!isSessionLoading && (thinkingPath || evaluation)" class="animate-in fade-in slide-in-from-bottom-4 duration-500 mb-6">
+          <!-- Thinking Process -->
+          <div v-if="thinkingPath" class="mb-6 border border-purple-200 bg-purple-50 rounded-xl overflow-hidden shadow-sm">
+             <div class="px-4 py-3 bg-purple-100/50 border-b border-purple-200 flex items-center justify-between">
+                <div class="flex items-center gap-2 text-sm font-semibold text-purple-800">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" />
+                  </svg>
+                  Session Thought Process
+                </div>
+             </div>
+             <div class="p-4 text-sm font-mono text-purple-900 bg-white/50 whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar">
+                {{ thinkingPath }}
+             </div>
+          </div>
+
+          <!-- Evaluation -->
+          <div v-if="evaluation" class="border border-amber-200 bg-amber-50 rounded-xl overflow-hidden shadow-sm">
+             <div class="px-4 py-3 bg-amber-100/50 border-b border-amber-200 flex items-center justify-between">
+                <div class="flex items-center gap-2 text-sm font-semibold text-amber-800">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                  Evaluation & Feedback
+                </div>
+                <div class="flex items-center gap-1">
+                   <template v-for="i in 5" :key="i">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" :class="i <= evaluation.score ? 'text-amber-500' : 'text-gray-300'" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                   </template>
+                </div>
+             </div>
+             <div class="p-4">
+                <p class="text-sm text-amber-900 mb-4">{{ evaluation.comment }}</p>
+                <div class="grid grid-cols-3 gap-4">
+                   <div v-for="(score, dim) in evaluation.dimensions" :key="dim" class="bg-white rounded-lg p-2 border border-amber-100 text-center">
+                      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">{{ dim }}</div>
+                      <div class="text-lg font-bold text-amber-600">{{ score }}/5</div>
+                   </div>
+                </div>
+             </div>
+          </div>
+        </div>
+
+        <div v-for="(msg, index) in messages" :key="index" v-show="!isSessionLoading" :class="['flex w-full group items-start gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300', msg.role === 'user' ? 'flex-row-reverse' : '']">
           
           <!-- Avatar -->
           <div :class="['w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm', msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white']">
@@ -275,8 +352,8 @@
               </div>
             </div>
 
-            <!-- Reasoning Process (DeepSeek Reasoner) -->
-            <div v-if="msg.reasoning" class="mb-4">
+            <!-- Thinking Process (DeepSeek Reasoner) -->
+            <div v-if="msg.reasoning_content" class="mb-4">
               <details class="group border border-gray-200 bg-gray-50 rounded-lg overflow-hidden transition-all duration-200" :open="msg.isReasoningOpen">
                 <summary 
                   @click.prevent="msg.isReasoningOpen = !msg.isReasoningOpen"
@@ -294,7 +371,7 @@
                   </svg>
                 </summary>
                 <div class="p-3 text-xs font-mono text-gray-600 bg-gray-50/50 whitespace-pre-wrap leading-relaxed border-t border-gray-200 animate-in slide-in-from-top-2 duration-200" style="min-height: 120px; max-height: 400px; overflow-y: auto;">
-                  {{ msg.reasoning }}
+                  {{ msg.reasoning_content }}
                 </div>
               </details>
             </div>
@@ -316,6 +393,26 @@
                   <span class="bg-blue-100 text-blue-700 px-1.5 rounded font-mono text-[10px] mt-0.5">{{ (source.relevance_score * 100).toFixed(0) }}%</span>
                   <span class="line-clamp-2">{{ source.content }}</span>
                 </div>
+              </div>
+            </div>
+
+            <!-- Suggested Questions -->
+            <div v-if="msg.role === 'assistant' && msg.suggestions && msg.suggestions.length && enableSuggestions" class="mt-4 pt-3 border-t border-gray-100 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-300">
+              <div class="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+                Suggested Follow-up
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button 
+                  v-for="(suggestion, sIdx) in msg.suggestions" 
+                  :key="sIdx"
+                  @click="sendMessage(suggestion)"
+                  class="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs rounded-full hover:bg-blue-100 transition-colors border border-blue-200 text-left"
+                >
+                  {{ suggestion }}
+                </button>
               </div>
             </div>
 
@@ -373,7 +470,8 @@
             <textarea 
               v-model="inputQuery" 
               @keydown.enter.exact.prevent="handleEnterKey"
-              placeholder="Ask a question about the course..." 
+              @keydown="handleShortcut"
+              placeholder="Ask a question about the course..."  
               class="w-full bg-white text-gray-800 pl-4 pr-14 py-4 focus:outline-none resize-none"
               rows="1"
               style="min-height: 56px; max-height: 200px;"
@@ -476,6 +574,58 @@
         <ModernButton variant="primary" :loading="startingSession" @click="confirmNewChat">Start Session</ModernButton>
       </template>
     </Modal>
+
+    <!-- Settings Modal -->
+    <Modal :isOpen="showSettings" @close="showSettings = false">
+      <template #title>Settings</template>
+      <div class="space-y-6">
+        <!-- Feature Toggles -->
+        <div>
+          <h3 class="text-sm font-medium text-gray-900 mb-3">Features</h3>
+          <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div>
+              <div class="text-sm font-medium text-gray-900">Next Question Suggestions</div>
+              <div class="text-xs text-gray-500">Automatically suggest follow-up questions</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="enableSuggestions" class="sr-only peer">
+              <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Shortcuts Configuration -->
+        <div>
+          <h3 class="text-sm font-medium text-gray-900 mb-3">Keyboard Shortcuts</h3>
+          <div class="space-y-2">
+            <div v-for="(shortcut, index) in shortcuts" :key="index" class="p-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col gap-2">
+              <div class="flex items-center justify-between">
+                <div class="inline-flex items-center px-2 py-1 rounded text-xs font-mono bg-white border border-gray-200 shadow-sm text-gray-600">
+                  Alt + {{ shortcut.key }}
+                </div>
+                <input 
+                  v-model="shortcut.label" 
+                  class="text-xs font-medium text-right bg-transparent border-none focus:ring-0 text-gray-600 p-0 placeholder-gray-400"
+                  placeholder="Button Label"
+                />
+              </div>
+              <textarea 
+                v-model="shortcut.text" 
+                rows="2"
+                class="w-full text-xs text-gray-700 bg-white border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 resize-none"
+                placeholder="Message text to send..."
+              ></textarea>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400 mt-2 text-center">
+            Press <span class="font-mono bg-gray-100 px-1 rounded text-gray-600">Alt</span> + <span class="font-mono bg-gray-100 px-1 rounded text-gray-600">Number</span> to trigger
+          </p>
+        </div>
+      </div>
+      <template #footer>
+        <ModernButton variant="primary" @click="showSettings = false">Done</ModernButton>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -496,6 +646,24 @@ const messages = ref([])
 const inputQuery = ref('')
 const isStreaming = ref(false)
 const isSending = ref(false) // 新增：发送状态锁
+const sessionStreamingStatus = ref({}) // Session ID -> Boolean
+const expectedQuestions = ref([]) // 当前会话的预期问题
+const thinkingPath = ref('') // Session Thinking Path
+const evaluation = ref(null) // Session Evaluation
+
+// Shortcuts & Toast
+const showToast = ref(false)
+const toastMessage = ref('')
+
+// Settings & Feature Flags
+const showSettings = ref(false)
+const enableSuggestions = ref(true)
+
+const shortcuts = ref([
+  { key: '1', alt: true, label: '没听懂', text: '我不理解，请用更通俗的语言解释一遍' },
+  { key: '2', alt: true, label: '继续', text: '请继续' },
+  { key: '3', alt: true, label: '举例', text: '请举一个具体的例子' }
+])
 
 const selectedModel = ref('deepseek')
 const selectedStyle = ref('default')
@@ -625,14 +793,28 @@ async function createDefaultSession() {
   messages.value = []
 }
 
+const isSessionLoading = ref(false)
+
 async function switchSession(id) {
+  if (id === currentSessionId.value) return
+  
   try {
     const session = sessions.value.find(s => s.id === id)
     if (session) {
+      // 1. Clear current state and show loader
+      isSessionLoading.value = true
+      messages.value = [] 
+      expectedQuestions.value = [] // Clear expected questions
+      thinkingPath.value = ''
+      evaluation.value = null
+      
       currentSessionId.value = session.id
       currentSessionTitle.value = session.title || 'Chat'
       currentSessionMode.value = session.mode || 'learning'
       
+      // Sync streaming status from session map
+      isStreaming.value = !!sessionStreamingStatus.value[id]
+
       // Stop previous polling
       if (videoPollInterval) clearInterval(videoPollInterval)
       videoStatus.value = null
@@ -646,14 +828,59 @@ async function switchSession(id) {
       const res = await fetch(`/api/v1/chat/history/${id}`)
       if (res.ok) {
         const data = await res.json()
-        messages.value = data
+        // Double check session ID in case of race condition
+        if (currentSessionId.value === id) {
+             messages.value = data
+        }
       } else {
-        messages.value = []
+        if (currentSessionId.value === id) {
+            messages.value = []
+        }
       }
+
+      // Fetch Session Context (Expected Questions)
+      try {
+        const ctxRes = await fetch(`/api/v1/chat/history/${id}/context`)
+        if (ctxRes.ok) {
+          const ctxData = await ctxRes.json()
+          if (currentSessionId.value === id) {
+            expectedQuestions.value = ctxData.expect_questions || []
+            // Sync with new fields if they exist in context (fallback)
+            if (ctxData.thinking_path) thinkingPath.value = ctxData.thinking_path
+            if (ctxData.evaluation) evaluation.value = ctxData.evaluation
+          }
+        }
+        
+        // Fetch Thinking Process
+        const thinkRes = await fetch(`/api/v1/chat/session/${id}/thinking`)
+        if (thinkRes.ok) {
+           const thinkData = await thinkRes.json()
+           if (currentSessionId.value === id && thinkData.thoughtProcess) {
+              thinkingPath.value = thinkData.thoughtProcess
+           }
+        }
+
+        // Fetch Evaluation
+        const evalRes = await fetch(`/api/v1/chat/session/${id}/evaluation`)
+        if (evalRes.ok) {
+           const evalData = await evalRes.json()
+           if (currentSessionId.value === id && evalData.evaluation && Object.keys(evalData.evaluation).length > 0) {
+              evaluation.value = evalData.evaluation
+           }
+        }
+
+      } catch (e) {
+        console.warn('Failed to fetch session context', e)
+      }
+
     }
   } catch (e) {
     console.error('Failed to load history', e)
     messages.value = []
+  } finally {
+      if (currentSessionId.value === id) {
+          isSessionLoading.value = false
+      }
   }
 }
 
@@ -804,8 +1031,10 @@ async function waitForConnection() {
   })
 }
 
-async function sendMessage() {
-  if (!inputQuery.value.trim() || isStreaming.value || isSending.value) return
+async function sendMessage(text = null) {
+  const query = text || inputQuery.value
+  
+  if (!query.trim() || isStreaming.value || isSending.value) return
   
   isSending.value = true
   
@@ -814,22 +1043,26 @@ async function sendMessage() {
       await createDefaultSession()
     }
 
-    const query = inputQuery.value
+    // Clear input only if we used it directly (not shortcut/suggestion)
+    if (!text) {
+      inputQuery.value = ''
+    }
     
     messages.value.push({
       role: 'user',
       content: query
     })
     
-    inputQuery.value = ''
     isStreaming.value = true
+    sessionStreamingStatus.value[currentSessionId.value] = true
     
     messages.value.push({
       role: 'assistant',
       content: '',
-      reasoning: '',
+      reasoning_content: '', // Changed from reasoning to match schema
       sources: [],
       skills: [],
+      suggestions: [],
       status: null,
       status_updates: [],
       react_steps: []
@@ -858,10 +1091,31 @@ async function sendMessage() {
 }
 
 function handleWSMessage(data) {
+  // Update streaming status for the session if end/error
+  if (data.session_id) {
+    if (data.type === 'end' || data.type === 'error') {
+      sessionStreamingStatus.value[data.session_id] = false
+      if (data.session_id === currentSessionId.value) {
+        isStreaming.value = false
+      }
+    }
+  }
+
+  // Check if the message belongs to the current session
+  if (data.session_id && data.session_id !== currentSessionId.value) {
+    console.log(`Received message for background session ${data.session_id}, ignoring render.`)
+    return
+  }
+
   const currentMsg = messages.value[messages.value.length - 1]
   if (!currentMsg || currentMsg.role !== 'assistant') return
 
   switch (data.type) {
+    case 'evaluation':
+      evaluation.value = data.content
+      scrollToBottom()
+      break
+    
     case 'token':
       currentMsg.content += data.content
       scrollToBottom()
@@ -940,11 +1194,11 @@ function handleWSMessage(data) {
       break
 
     case 'reasoning':
-      if (!currentMsg.reasoning) {
-        currentMsg.reasoning = ''
+      if (!currentMsg.reasoning_content) {
+        currentMsg.reasoning_content = ''
         currentMsg.isReasoningOpen = true
       }
-      currentMsg.reasoning += data.content
+      currentMsg.reasoning_content += data.content
       currentMsg.status = 'thinking'
       scrollToBottom()
       break
@@ -958,18 +1212,25 @@ function handleWSMessage(data) {
       }, 500)
       break
 
+    case 'suggestions':
+      if (!currentMsg.suggestions) currentMsg.suggestions = []
+      currentMsg.suggestions = data.content
+      expectedQuestions.value = data.content // Update expected questions for sidebar
+      scrollToBottom()
+      break
+
     case 'sources':
       currentMsg.sources = data.data
       break
       
     case 'end':
-      isStreaming.value = false
+      // Handled at top of function for state sync
       currentMsg.status = null
       break
       
     case 'error':
       currentMsg.content += `\n[Error: ${data.content}]`
-      isStreaming.value = false
+      // Handled at top of function for state sync
       break
   }
 }
@@ -997,6 +1258,33 @@ function debounce(func, wait, immediate) {
     timeout = setTimeout(later, wait)
     if (callNow) func.apply(context, args)
   }
+}
+
+function handleShortcut(event) {
+  // Check for Alt+Number shortcuts
+  if (event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey) {
+    const key = event.key
+    const shortcut = shortcuts.value.find(s => s.key === key)
+    
+    if (shortcut) {
+      event.preventDefault()
+      triggerShortcut(shortcut)
+    }
+  }
+}
+
+function triggerShortcut(shortcut) {
+  if (isStreaming.value) return
+  
+  // Show Toast
+  toastMessage.value = `Sending: "${shortcut.label}"`
+  showToast.value = true
+  setTimeout(() => {
+    showToast.value = false
+  }, 2000)
+  
+  // Send Message
+  sendMessage(shortcut.text)
 }
 
 const handleEnterKey = debounce(() => {
