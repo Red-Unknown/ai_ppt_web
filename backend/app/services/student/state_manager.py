@@ -2,7 +2,7 @@ import json
 import uuid
 import logging
 import redis
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 from datetime import datetime
 from backend.app.schemas.student import StudentProfile, StudentState, InteractionMode, LearningStyle
 
@@ -11,10 +11,13 @@ logger = logging.getLogger(__name__)
 # Mock Redis Client for development
 class MockRedis:
     def __init__(self):
-        self.data: Dict[str, str] = {}
+        self.data: Dict[str, Any] = {}
 
     def get(self, key: str) -> Optional[str]:
-        return self.data.get(key)
+        val = self.data.get(key)
+        if isinstance(val, list):
+            return None # Mock limitation: get() shouldn't return list for string keys
+        return val
 
     def set(self, key: str, value: str, ex: Optional[int] = None):
         self.data[key] = value
@@ -22,6 +25,24 @@ class MockRedis:
     def delete(self, key: str):
         if key in self.data:
             del self.data[key]
+
+    def rpush(self, key: str, value: str) -> int:
+        if key not in self.data:
+            self.data[key] = []
+        if not isinstance(self.data[key], list):
+            self.data[key] = []
+        self.data[key].append(value)
+        return len(self.data[key])
+
+    def lrange(self, key: str, start: int, end: int) -> List[str]:
+        if key not in self.data:
+            return []
+        val = self.data[key]
+        if not isinstance(val, list):
+            return []
+        if end == -1:
+            return val[start:]
+        return val[start : end + 1]
 
     def ping(self):
         return True
@@ -62,6 +83,20 @@ class SafeRedis:
         except Exception as e:
             logger.error(f"Redis DELETE failed: {e}")
 
+    def rpush(self, key: str, value: str) -> Optional[int]:
+        try:
+            return self.client.rpush(key, value)
+        except Exception as e:
+            logger.error(f"Redis RPUSH failed: {e}")
+            return None
+
+    def lrange(self, key: str, start: int, end: int) -> List[str]:
+        try:
+            return self.client.lrange(key, start, end)
+        except Exception as e:
+            logger.error(f"Redis LRANGE failed: {e}")
+            return []
+
 # Replace global client with safe wrapper
 redis_client = SafeRedis(redis_client)
 
@@ -74,6 +109,7 @@ class StudentStateManager:
     STATE_PREFIX = "student:state:"
     HISTORY_PREFIX = "student:history:"
     SESSIONS_PREFIX = "student:sessions:"
+    EVENTS_PREFIX = "student:events:"
 
     @staticmethod
     def _get_profile_key(user_id: str) -> str:
@@ -86,6 +122,10 @@ class StudentStateManager:
     @staticmethod
     def _get_history_key(session_id: str) -> str:
         return f"{StudentStateManager.HISTORY_PREFIX}{session_id}"
+
+    @staticmethod
+    def _get_events_key(session_id: str) -> str:
+        return f"{StudentStateManager.EVENTS_PREFIX}{session_id}"
 
     @classmethod
     def get_profile(cls, user_id: str) -> Optional[StudentProfile]:
@@ -162,7 +202,7 @@ class StudentStateManager:
             redis_client.set(cls._get_state_key(session_id), state.model_dump_json())
 
     @classmethod
-    def add_history(cls, session_id: str, role: str, content: str):
+    def add_history(cls, session_id: str, role: str, content: str, reasoning: str = None, tool_calls: list = None):
         """Add a message to the session history."""
         key = cls._get_history_key(session_id)
         data = redis_client.get(key)
@@ -172,11 +212,19 @@ class StudentStateManager:
             logger.error(f"Corrupted history data for session {session_id}. Resetting.")
             history = []
         
-        history.append({
+        message = {
             "role": role,
             "content": content,
             "timestamp": datetime.now().isoformat()
-        })
+        }
+        
+        if reasoning:
+            message["reasoning_content"] = reasoning
+            
+        if tool_calls:
+            message["tool_calls"] = tool_calls
+            
+        history.append(message)
         
         # Limit history size to last 100 messages to prevent bloat
         if len(history) > 100:
@@ -185,20 +233,95 @@ class StudentStateManager:
         redis_client.set(key, json.dumps(history))
 
     @classmethod
-    def get_history(cls, session_id: str, limit: int = 10) -> List[Dict]:
+    def append_event(cls, session_id: str, event: Dict[str, Any]):
+        """Append an event to the session event log (Event Sourcing)."""
+        if not session_id:
+            return
+        key = cls._get_events_key(session_id)
+        # Add timestamp if missing
+        if "timestamp" not in event:
+            event["timestamp"] = datetime.now().isoformat()
+        redis_client.rpush(key, json.dumps(event))
+
+    @classmethod
+    def get_events(cls, session_id: str) -> List[Dict[str, Any]]:
+        """Get full event history for a session."""
+        if not session_id:
+            return []
+        key = cls._get_events_key(session_id)
+        events_json = redis_client.lrange(key, 0, -1)
+        events = []
+        if events_json:
+            for e_str in events_json:
+                try:
+                    events.append(json.loads(e_str))
+                except (json.JSONDecodeError, TypeError):
+                    continue
+        return events
+
+    @classmethod
+    def get_history(cls, session_id: str, limit: int = 100) -> List[Dict]:
         """Get recent chat history."""
+        # Use cls._get_history_key(session_id) to get the correct key
         key = cls._get_history_key(session_id)
-        data = redis_client.get(key)
-        if not data:
-            return []
-            
+        
         try:
+            # Check if redis_client is wrapped or direct
+            if hasattr(redis_client, 'get'):
+                data = redis_client.get(key)
+            else:
+                # Fallback for mock/raw client difference
+                data = None
+                
+            if not data:
+                return []
+                
             history = json.loads(data)
-        except json.JSONDecodeError:
-            logger.error(f"Corrupted history data for session {session_id}. Returning empty.")
-            return []
+            return history[-limit:]
             
-        return history[-limit:]
+        except Exception as e:
+            logger.error(f"Error retrieving history for session {session_id}: {e}")
+            return []
+
+    @classmethod
+    def save_session_context(cls, session_id: str, expect_questions: list = None, thinking_path: str = None, evaluation: dict = None):
+        """Save session context like expected questions, thinking path, and evaluation."""
+        key = f"session_context:{session_id}"
+        context = {}
+        
+        try:
+            existing = redis_client.get(key)
+            if existing:
+                context = json.loads(existing)
+        except:
+            pass
+            
+        if expect_questions is not None:
+            context["expect_questions"] = expect_questions
+            
+        if thinking_path is not None:
+            context["thinking_path"] = thinking_path
+            
+        if evaluation is not None:
+            context["evaluation"] = evaluation
+            
+        context["updated_at"] = datetime.now().isoformat()
+        
+        try:
+            redis_client.set(key, json.dumps(context))
+        except Exception as e:
+            logger.error(f"Failed to save session context: {e}")
+
+    @classmethod
+    def get_session_context(cls, session_id: str) -> Dict:
+        """Get session context."""
+        key = f"session_context:{session_id}"
+        try:
+            data = redis_client.get(key)
+            return json.loads(data) if data else {}
+        except Exception as e:
+            logger.error(f"Failed to get session context: {e}")
+            return {}
 
     @classmethod
     def truncate_history(cls, session_id: str, index: int):

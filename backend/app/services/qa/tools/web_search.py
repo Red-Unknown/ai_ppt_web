@@ -24,12 +24,25 @@ except ImportError:
     DuckDuckGoSearchAPIWrapper = None
     DuckDuckGoSearchResults = None
 
+import warnings
+
+# Suppress LangChain deprecation warnings for Tavily
+warnings.filterwarnings("ignore", category=UserWarning, module="langchain_community.tools.tavily_search")
+warnings.filterwarnings("ignore", message=".*TavilySearchResults.*deprecated.*")
+
 try:
     from langchain_community.tools.tavily_search import TavilySearchResults
     HAS_TAVILY = True
 except ImportError:
     HAS_TAVILY = False
     TavilySearchResults = None
+
+try:
+    from langchain_tavily import TavilySearchResults as TavilySearchResultsV2
+    HAS_TAVILY_V2 = True
+except ImportError:
+    HAS_TAVILY_V2 = False
+    TavilySearchResultsV2 = None
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +53,17 @@ class WebSearchSkill(BaseSkill):
         self._session = None
         
         # Priority 1: Tavily (Better for RAG/LLM)
-        if HAS_TAVILY and os.environ.get("TAVILY_API_KEY"):
+        if os.environ.get("TAVILY_API_KEY"):
             try:
-                # Enable include_answer for direct answers
-                self.search_tool = TavilySearchResults(max_results=5, include_answer=True)
-                self.engine = "tavily"
-                logger.info("WebSearchSkill initialized with Tavily Search.")
+                # Disable include_answer to speed up search (Agent will handle the answer)
+                if HAS_TAVILY_V2 and TavilySearchResultsV2:
+                    self.search_tool = TavilySearchResultsV2(max_results=5, include_answer=False)
+                    self.engine = "tavily"
+                    logger.info("WebSearchSkill initialized with Tavily Search V2 (include_answer=False).")
+                elif HAS_TAVILY and TavilySearchResults:
+                    self.search_tool = TavilySearchResults(max_results=5, include_answer=False)
+                    self.engine = "tavily"
+                    logger.info("WebSearchSkill initialized with Tavily Search (include_answer=False).")
             except Exception as e:
                 logger.warning(f"Failed to initialize Tavily Search: {e}")
 

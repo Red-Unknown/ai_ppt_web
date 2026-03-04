@@ -6,43 +6,34 @@ from backend.app.schemas.session import (
     SessionResponse, PreviewStatusResponse
 )
 from backend.app.schemas.qa import ChatMessage, ChatSessionResponse
+from backend.app.services.student.state_manager import StudentStateManager
 
 # In-memory storage for demonstration (Replace with Redis/DB)
 _SESSIONS: Dict[str, Dict] = {}
-_CHAT_SESSIONS: Dict[str, Dict] = {}  # Dedicated for general chat: {session_id: {user_id, title, history: [], updated_at}}
+# _CHAT_SESSIONS is now a fallback if StudentStateManager is not used for some reason,
+# but we should prefer StudentStateManager for persistence.
+_CHAT_SESSIONS: Dict[str, Dict] = {}  
 _TASKS: Dict[str, Dict] = {}
 
 class SessionManager:
     """
     Manages user sessions for learning and preview generation.
+    Now delegates chat history to StudentStateManager (Redis-backed).
     """
     
     # --- General Chat Methods (New) ---
     
     @staticmethod
     def create_chat_session(user_id: str) -> str:
-        session_id = f"chat_{uuid.uuid4().hex[:8]}"
-        now = datetime.now().isoformat()
-        
-        _CHAT_SESSIONS[session_id] = {
-            "id": session_id,
-            "user_id": user_id,
-            "title": "New Chat",
-            "updated_at": now,
-            "history": [],
-            "cache": {},          # Single Chat Cache: {fingerprint: docs}
-            "search_used": False  # Web Search Limit Flag
-        }
-        return session_id
+        # Use StudentStateManager to create session
+        return StudentStateManager.create_session(user_id)
 
     @staticmethod
     def get_user_sessions(user_id: str) -> list[ChatSessionResponse]:
+        # Use StudentStateManager to get sessions
+        sessions_data = StudentStateManager.get_user_sessions(user_id)
         sessions = []
-        # Sort by updated_at desc
-        user_sessions = [s for s in _CHAT_SESSIONS.values() if s["user_id"] == user_id]
-        user_sessions.sort(key=lambda x: x["updated_at"], reverse=True)
-        
-        for s in user_sessions:
+        for s in sessions_data:
             sessions.append(ChatSessionResponse(
                 id=s["id"],
                 title=s["title"],
@@ -52,65 +43,52 @@ class SessionManager:
 
     @staticmethod
     def get_chat_history(session_id: str) -> list[ChatMessage]:
-        session = _CHAT_SESSIONS.get(session_id)
-        if not session:
-            return []
-        return [ChatMessage(**msg) for msg in session["history"]]
+        # Use StudentStateManager to get history
+        # It returns list of dicts, we convert to ChatMessage
+        history_data = StudentStateManager.get_history(session_id, limit=100)
+        return [ChatMessage(**msg) for msg in history_data]
 
     @staticmethod
     def add_message(session_id: str, role: str, content: str, sources: list = None):
-        session = _CHAT_SESSIONS.get(session_id)
-        if not session:
-            # Auto-create for simplicity if missing (e.g. dev restart)
-            # In prod, this should fail or rely on persistent storage
-            now = datetime.now().isoformat()
-            _CHAT_SESSIONS[session_id] = {
-                "id": session_id,
-                "user_id": "student_001", # Fallback user
-                "title": "Restored Chat",
-                "updated_at": now,
-                "history": []
-            }
-            session = _CHAT_SESSIONS[session_id]
-            
-        msg = {
-            "role": role,
-            "content": content,
-            "sources": sources or [],
-            "timestamp": datetime.now().isoformat()
-        }
-        session["history"].append(msg)
-        session["updated_at"] = msg["timestamp"]
-        
-        # Update title if it's the first user message
-        if role == "user" and len(session["history"]) <= 2:
-            # Simple heuristic: first 20 chars
-            session["title"] = content[:30] + "..." if len(content) > 30 else content
+        # Delegate to StudentStateManager
+        # Note: reasoning/tool_calls are handled by QAService calling StudentStateManager.add_history directly
+        # This method might be used by other components, so we keep it compatible
+        StudentStateManager.add_history(session_id, role, content)
 
     @staticmethod
     def reset_search_quota(session_id: str):
         """Reset search quota for a new turn (Q&A pair)."""
+        # We can store this in StudentStateManager too if needed, 
+        # or keep using _CHAT_SESSIONS for ephemeral state if it's per-turn
+        # For now, let's use the ephemeral dict for quota as it's session-volatile
         session = _CHAT_SESSIONS.get(session_id)
-        if session:
+        if not session:
+             _CHAT_SESSIONS[session_id] = {"search_used": False}
+        else:
             session["search_used"] = False
 
     @staticmethod
     def try_acquire_search_quota(session_id: str) -> bool:
+        """
+        Atomic check-and-set for search quota.
+        """
         session = _CHAT_SESSIONS.get(session_id)
         if not session:
-            return False
-        # If 'search_used' key is missing, default to False (unused)
+            _CHAT_SESSIONS[session_id] = {"search_used": False}
+            session = _CHAT_SESSIONS[session_id]
+            
         if session.get("search_used", False):
             return False
+            
         session["search_used"] = True
         return True
 
     @staticmethod
     def is_search_used(session_id: str) -> bool:
+        """Check if web search has been used in this session."""
         session = _CHAT_SESSIONS.get(session_id)
-        if not session:
-            return False
-        return session.get("search_used", False)
+        return session.get("search_used", False) if session else False
+    
     @staticmethod
     def calculate_fingerprint(query: str) -> str:
         """Calculate MD5 fingerprint for query normalization."""
@@ -132,59 +110,19 @@ class SessionManager:
     def cache_docs(session_id: str, query: str, docs: list):
         """Cache documents for a query."""
         session = _CHAT_SESSIONS.get(session_id)
-        if session:
-            fingerprint = SessionManager.calculate_fingerprint(query)
-            if "cache" not in session:
-                session["cache"] = {}
-            session["cache"][fingerprint] = docs
-
-    @staticmethod
-    def try_acquire_search_quota(session_id: str) -> bool:
-        """
-        Atomic check-and-set for search quota.
-        Returns True if quota was acquired (search allowed), False otherwise.
-        """
-        # In a real Redis/DB scenario, this should be a Lua script or transaction.
-        # Here we use a simple lock-like approach for the in-memory dict.
-        # Since standard dict operations in Python (CPython) are atomic for single items,
-        # we can check and set. But for strict correctness in multi-threaded envs, 
-        # we might need a lock. However, FastAPI is async, running in single thread loop 
-        # unless using threads.
-        
-        session = _CHAT_SESSIONS.get(session_id)
         if not session:
-            return False
+            _CHAT_SESSIONS[session_id] = {}
+            session = _CHAT_SESSIONS[session_id]
             
-        if session.get("search_used", False):
-            return False
-            
-        session["search_used"] = True
-        return True
-
-    @staticmethod
-    def is_search_used(session_id: str) -> bool:
-        """Check if web search has been used in this session."""
-        session = _CHAT_SESSIONS.get(session_id)
-        return session.get("search_used", False) if session else False
-
-    @staticmethod
-    def mark_search_used(session_id: str):
-        """Mark web search as used for this session."""
-        session = _CHAT_SESSIONS.get(session_id)
-        if session:
-            session["search_used"] = True
+        fingerprint = SessionManager.calculate_fingerprint(query)
+        if "cache" not in session:
+            session["cache"] = {}
+        session["cache"][fingerprint] = docs
 
     @staticmethod
     def truncate_history(session_id: str, index: int) -> bool:
-        session = _CHAT_SESSIONS.get(session_id)
-        if not session or index < 0:
-            return False
-            
-        if index < len(session["history"]):
-            session["history"] = session["history"][:index]
-            session["updated_at"] = datetime.now().isoformat()
-            return True
-        return False
+        StudentStateManager.truncate_history(session_id, index)
+        return True
 
     # --- Learning Session Methods (Existing) ---
     

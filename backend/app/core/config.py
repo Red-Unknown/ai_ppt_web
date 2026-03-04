@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Web Search Configuration
     TAVILY_API_KEY: str = ""
 
+    # Feature Flags
+    ENABLE_SUGGESTIONS: bool = True
+
 
     class Config:
         env_file = ".env"
