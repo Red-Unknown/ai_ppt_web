@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginHome from '../pages/LoginHome.vue'
+import PptShow from '../pages/PptShow.vue'
 const routes = [
   {
     path: '/',
@@ -10,6 +11,11 @@ const routes = [
     path: '/login2',
     name: 'Login2',
     component: LoginHome
+  },
+  {
+    path: '/ppt-show',
+    name: 'PptShow',
+    component: PptShow
   }
 ]
 

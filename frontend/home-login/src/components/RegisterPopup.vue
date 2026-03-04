@@ -140,6 +140,10 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
+
+// 路由实例
+const router = useRouter()
 
 // 状态
 const selectedRole = ref('student')
@@ -220,7 +224,15 @@ const handleSubmit = async () => {
     // 模拟注册请求
     await new Promise(resolve => setTimeout(resolve, 1500))
     console.log('注册成功', form.value)
+    
+    // 保存登录状态
+    localStorage.setItem('token', 'mock-token') // 模拟token
+    localStorage.setItem('userRole', selectedRole.value)
+    
     alert('注册成功！')
+    
+    // 跳转到PPT展示页面
+    router.push('/ppt-show')
   } catch (error) {
     console.error('注册失败', error)
     alert('注册失败，请重试')

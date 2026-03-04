@@ -126,6 +126,10 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+
+// 路由实例
+const router = useRouter()
 
 // 表单数据
 const form = ref({
@@ -187,7 +191,19 @@ const handleSubmit = async () => {
     // 模拟登录请求
     await new Promise(resolve => setTimeout(resolve, 1500))
     console.log('登录成功', form.value)
+    
+    // 保存登录状态
+    if (form.value.rememberMe) {
+      localStorage.setItem('rememberedUsername', form.value.username)
+      localStorage.setItem('token', 'mock-token') // 模拟token
+    } else {
+      localStorage.removeItem('rememberedUsername')
+    }
+    
     alert('登录成功！')
+    
+    // 跳转到PPT展示页面
+    router.push('/ppt-show')
   } catch (error) {
     console.error('登录失败', error)
     alert('登录失败，请重试')
