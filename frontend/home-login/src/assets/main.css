@@ -1,0 +1,8 @@
+/* src/assets/main.css */
+@tailwind base;    /* 引入 Tailwind 的基础样式（如默认的标签样式） */
+@tailwind components; /* 引入 Tailwind 的组件类（如按钮、卡片等） */
+@tailwind utilities;  /* 引入 Tailwind 的工具类（如间距、颜色、布局等） */
+/* main.css */
+body {
+  background-color: #f5f5f5;
+}
