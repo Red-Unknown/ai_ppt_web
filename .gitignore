@@ -6,6 +6,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 cache.db
+*.spec
 
 # Environment
 .env
@@ -16,22 +17,36 @@ ENV/
 env.bak/
 venv.bak/
 .conda_pkgs/
+Scripts/
 
 # IDE
 .vscode/
 .idea/
 .trae/
+*.swp
+*.swo
 
 # Backend
 backend/app/__pycache__/
 *.log
 *.sqlite
+.pytest_cache/
+htmlcov/
+coverage/
+.coverage
+.coverage.*
 
 # Frontend
 frontend/node_modules/
 frontend/dist/
 frontend/.env.local
 frontend/.env.*.local
+frontend/playwright-report/
+frontend/test-results/
+frontend/.last-run.json
+
+# Playwright Browsers (Local binaries)
+pw-browsers/
 
 # Celery
 celerybeat-schedule
@@ -51,3 +66,16 @@ data/
 赛题信息/
 团队信息/
 选题阶段（结束）/
+
+# Distribution / Packaging
+build/
+develop-eggs/
+dist/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
