@@ -44,6 +44,8 @@ class ChatMessage(BaseModel):
     role: str
     content: str
     sources: Optional[List[Dict[str, Any]]] = None
+    reasoning_content: Optional[str] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
     timestamp: Optional[str] = None
 
 class ChatSessionResponse(BaseModel):

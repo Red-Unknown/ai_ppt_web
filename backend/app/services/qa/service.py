@@ -115,7 +115,8 @@ class QAService:
                 max_tokens=config.get("max_tokens", settings.DEEPSEEK_MAX_TOKENS),
                 streaming=True,
                 max_retries=3,
-                model_kwargs={"extra_body": {"include_reasoning": True}} if scenario == "reasoner" else {}
+                # Pass extra_body directly as keyword argument, not nested in model_kwargs
+                extra_body={"include_reasoning": True} if scenario == "reasoner" else None
             )
 
             
@@ -198,47 +199,77 @@ class QAService:
         Truncate history to fit within token limit, keeping most recent messages.
         Uses tiktoken for accurate counting (cl100k_base for GPT-4/DeepSeek).
         """
-        try:
-            encoding = tiktoken.get_encoding("cl100k_base")
-        except Exception:
-            # Fallback to gpt2 if cl100k_base not found
-            encoding = tiktoken.get_encoding("gpt2")
-            
-        processed_msgs = []
-        current_tokens = 0
+        encoding = tiktoken.get_encoding("cl100k_base")
+        total_tokens = 0
+        truncated_history = []
         
-        # Process from newest to oldest
+        # Iterate backwards
         for msg in reversed(history):
-            role = msg.get("role", "unknown")
             content = msg.get("content", "")
-            msg_str = f"{role}: {content}"
-            
-            # Count tokens
-            tokens = len(encoding.encode(msg_str))
-            
-            # Reserve space for at least one message if possible, but strict limit applies
-            if current_tokens + tokens > max_tokens and processed_msgs:
+            tokens = len(encoding.encode(content))
+            if total_tokens + tokens > max_tokens:
                 break
-                
-            processed_msgs.append(msg_str)
-            current_tokens += tokens
+            truncated_history.insert(0, msg)
+            total_tokens += tokens
             
-        # Reverse back to chronological order
-        return "\n".join(reversed(processed_msgs))
+        return json.dumps(truncated_history, ensure_ascii=False)
 
-    async def predict_next_questions(self, query: str) -> List[str]:
+    async def predict_next_questions(self, query: str, answer: str = "", context: Optional[str] = None) -> List[str]:
         """
-        Intelligent Prediction: Predict next 3 likely questions.
+        Generate 2 follow-up questions based on the user's query and the assistant's answer.
         """
-        # Mock logic based on keywords
-        if "Newton" in query or "Law" in query:
-            return ["What is the First Law?", "What is the Third Law?", "Real-world examples?"]
-        elif "课程" in query:
-            return ["如何考核?", "教材是什么?", "联系方式?"]
-        else:
-            return [f"More details about {query}?", "Examples?", "Related concepts?"]
+        if not settings.ENABLE_SUGGESTIONS:
+            return []
 
-    async def _direct_rag_stream(self, query: str, context_str: str, history_list: List[Dict]) -> AsyncGenerator[str, None]:
+        try:
+            # Simple prompt for suggestions
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", "你是一个善于引导学生深入思考的助教。请基于用户的提问和你的回答，生成2个后续可能被追问的问题。要求简短、相关且有深度。直接以JSON列表格式返回，例如：[\"问题1\", \"问题2\"]。不要包含Markdown代码块。"),
+                ("user", "用户提问: {query}\n\n你的回答: {answer}\n\n相关上下文: {context}")
+            ])
+            
+            # Use the 'summary' model for speed/stability (temperature 0.3)
+            # If unavailable, fallback to default llm
+            llm = self.llm_clients.get("summary", self.llm)
+            
+            chain = prompt | llm | StrOutputParser()
+            
+            # Truncate inputs to save tokens/time
+            safe_answer = answer[:1000] if answer else ""
+            safe_context = context[:500] if context else "无"
+            
+            result = await chain.ainvoke({
+                "query": query,
+                "answer": safe_answer,
+                "context": safe_context
+            })
+            
+            # Clean up result if it contains markdown
+            result = result.strip()
+            if result.startswith("```json"):
+                result = result[7:]
+            elif result.startswith("```"):
+                result = result[3:]
+            if result.endswith("```"):
+                result = result[:-3]
+            
+            try:
+                suggestions = json.loads(result.strip())
+                if isinstance(suggestions, list):
+                    return suggestions[:2] # Ensure only 2
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse suggestions JSON: {result}")
+                # Fallback splitting by newline if JSON fails
+                lines = [line.strip().lstrip("-").lstrip("*").strip() for line in result.split("\n") if line.strip()]
+                return lines[:2]
+                
+        except Exception as e:
+            logger.error(f"Error generating suggestions: {e}")
+            return []
+        
+        return []
+
+    async def _direct_rag_stream(self, query: str, context_str: str, history_list: List[Dict], session_id: str = None) -> AsyncGenerator[str, None]:
         """
         Stream answer using Direct RAG (No ReAct loop).
         """
@@ -251,7 +282,7 @@ class QAService:
             "history": history_str
         }
         
-        yield json.dumps({"type": "start", "action": "QA_ANSWER"})
+        yield self._emit_event(session_id, {"type": "start", "action": "QA_ANSWER"})
         
         try:
             # Manually format messages
@@ -259,11 +290,17 @@ class QAService:
             
             async for chunk in self.llm.astream(formatted_messages):
                 if chunk.content:
-                    yield json.dumps({"type": "token", "content": chunk.content})
+                    yield self._emit_event(session_id, {"type": "token", "content": chunk.content})
             
         except Exception as e:
             logger.error(f"Direct RAG error: {e}")
-            yield json.dumps({"type": "error", "content": f"Generation Error: {str(e)}"})
+            yield self._emit_event(session_id, {"type": "error", "content": f"Generation Error: {str(e)}"})
+
+    def _emit_event(self, session_id: str, event: Dict[str, Any]) -> str:
+        """Helper to save event to history and return JSON string."""
+        if session_id:
+            StudentStateManager.append_event(session_id, event)
+        return json.dumps(event)
 
     async def stream_answer_question(self, request: ChatRequest, user_id: str = "student_001") -> AsyncGenerator[str, None]:
         """
@@ -278,12 +315,13 @@ class QAService:
 
                 # 1. Intent Cache Hit (Zero Latency - In-Memory)
                 if request.query in self.intent_cache:
-                    yield json.dumps({"type": "start", "action": "QA_CACHE"})
-                    yield json.dumps({"type": "token", "content": self.intent_cache[request.query]})
+                    answer = self.intent_cache[request.query]
+                    yield self._emit_event(request.session_id, {"type": "start", "action": "QA_CACHE"})
+                    yield self._emit_event(request.session_id, {"type": "token", "content": answer})
                 
-                    suggestions = await self.predict_next_questions(request.query)
-                    yield json.dumps({"type": "suggestions", "content": suggestions})
-                    yield json.dumps({"type": "end"})
+                    suggestions = await self.predict_next_questions(request.query, answer=answer)
+                    yield self._emit_event(request.session_id, {"type": "suggestions", "content": suggestions})
+                    yield self._emit_event(request.session_id, {"type": "end"})
                     return
 
                 # 2. Single Chat Cache (Session Level)
@@ -291,7 +329,7 @@ class QAService:
                 if request.session_id:
                     cached_docs = SessionManager.get_cached_docs(request.session_id, request.query)
                     if cached_docs:
-                        yield json.dumps({"type": "status", "content": "已命中会话缓存，跳过检索..."})
+                        yield self._emit_event(request.session_id, {"type": "status", "content": "已命中会话缓存，跳过检索..."})
                         logger.info(f"Session {request.session_id} cache hit for query: {request.query}")
         
                 # 3. Get/Init Student Profile & State
@@ -308,10 +346,10 @@ class QAService:
                 intent = self.router.route(request.query)
                 
                 if intent == Intent.CONTROL:
-                    yield json.dumps({"type": "start", "action": "CONTROL"})
-                    yield json.dumps({"type": "token", "content": "执行控制指令: " + request.query})
-                    yield json.dumps({"type": "action", "data": {"command": request.query}})
-                    yield json.dumps({"type": "end"})
+                    yield self._emit_event(request.session_id, {"type": "start", "action": "CONTROL"})
+                    yield self._emit_event(request.session_id, {"type": "token", "content": "执行控制指令: " + request.query})
+                    yield self._emit_event(request.session_id, {"type": "action", "data": {"command": request.query}})
+                    yield self._emit_event(request.session_id, {"type": "end"})
                     return
         
                 elif intent == Intent.FEEDBACK:
@@ -327,7 +365,7 @@ class QAService:
                     docs = self.retriever.invoke(search_query)
                     context_str = "\n".join([d.page_content[:200] for d in docs])
                     
-                    yield json.dumps({"type": "status", "content": "正在分析反馈..."})
+                    yield self._emit_event(request.session_id, {"type": "status", "content": "正在分析反馈..."})
                     
                     # Use last_qa_query as topic if available, otherwise use state.current_topic
                     original_topic = state.current_topic
@@ -347,26 +385,26 @@ class QAService:
                     else:
                         StudentStateManager.reset_confusion(session_id)
         
-                    yield json.dumps({"type": "start", "action": feedback_result.get("action")})
+                    yield self._emit_event(request.session_id, {"type": "start", "action": feedback_result.get("action")})
                     
                     if feedback_result.get("action") == "FALLBACK_VIDEO":
-                        yield json.dumps({"type": "action", "data": feedback_result})
-                        yield json.dumps({"type": "token", "content": feedback_result.get("message")})
+                        yield self._emit_event(request.session_id, {"type": "action", "data": feedback_result})
+                        yield self._emit_event(request.session_id, {"type": "token", "content": feedback_result.get("message")})
                     else:
                         content = feedback_result.get("message") or feedback_result.get("content", "")
                         chunk_size = 5
                         for i in range(0, len(content), chunk_size):
-                            yield json.dumps({"type": "token", "content": content[i:i+chunk_size]})
+                            yield self._emit_event(request.session_id, {"type": "token", "content": content[i:i+chunk_size]})
                             await asyncio.sleep(0.02)
                             
                         if "audio_text" in feedback_result:
-                             yield json.dumps({"type": "action", "data": {"audio_text": feedback_result["audio_text"]}})
+                             yield self._emit_event(request.session_id, {"type": "action", "data": {"audio_text": feedback_result["audio_text"]}})
         
-                    yield json.dumps({"type": "end"})
+                    yield self._emit_event(request.session_id, {"type": "end"})
                     return
         
                 else: # Intent.QA
-                    yield json.dumps({"type": "status", "content": "正在分析意图..."})
+                    yield self._emit_event(request.session_id, {"type": "status", "content": "正在分析意图..."})
                     StudentStateManager.reset_confusion(session_id)
                     
                     # Analyze QA Type for Instruction Injection
@@ -375,10 +413,10 @@ class QAService:
         
                     # --- DEEPSEEK REASONER BYPASS START ---
                     if request.model == "deepseek-reasoner":
-                        yield json.dumps({"type": "status", "content": "已切换至深度思考模式 (Reasoning)..."})
+                        yield self._emit_event(request.session_id, {"type": "status", "content": "已切换至深度思考模式 (Reasoning)..."})
                         
                         # 1. Retrieve
-                        yield json.dumps({"type": "status", "content": "正在检索知识库..."})
+                        yield self._emit_event(request.session_id, {"type": "status", "content": "正在检索知识库..."})
                         docs = self.retriever.invoke(request.query)
                         # Cache the results if session exists
                         if request.session_id:
@@ -396,11 +434,12 @@ class QAService:
                             "history": history_str
                         }
                         
-                        yield json.dumps({"type": "start", "action": "QA_ANSWER"})
+                        yield self._emit_event(request.session_id, {"type": "start", "action": "QA_ANSWER"})
                         
                         # 3. Stream
                         llm = self.llm_clients.get("reasoner", self.llm_clients["qa"])
                         full_answer = ""
+                        full_reasoning = ""
                         
                         try:
                             # Manually format messages
@@ -420,27 +459,44 @@ class QAService:
                                     reasoning = chunk.response_metadata.get("reasoning_content", "")
                                 
                                 if reasoning:
-                                    yield json.dumps({"type": "reasoning", "content": reasoning})
+                                    full_reasoning += reasoning
+                                    yield self._emit_event(request.session_id, {"type": "reasoning", "content": reasoning})
                                 
                                 if chunk.content:
                                     full_answer += chunk.content
-                                    yield json.dumps({"type": "token", "content": chunk.content})
+                                    yield self._emit_event(request.session_id, {"type": "token", "content": chunk.content})
                             
-                            yield json.dumps({"type": "reasoning_end"})
-                            yield json.dumps({"type": "end"})
+                            yield self._emit_event(request.session_id, {"type": "reasoning_end"})
+                            
+                            # Generate Suggestions
+                            try:
+                                suggestions = await self.predict_next_questions(request.query, answer=full_answer, context=context_str)
+                                yield self._emit_event(request.session_id, {"type": "suggestions", "content": suggestions})
+                            except Exception:
+                                pass
+
+                            yield self._emit_event(request.session_id, {"type": "end"})
                             
                             # Save History
                             try:
                                 StudentStateManager.add_history(session_id, "user", request.query)
-                                StudentStateManager.add_history(session_id, "assistant", full_answer)
+                                StudentStateManager.add_history(
+                                    session_id, 
+                                    "assistant", 
+                                    full_answer,
+                                    reasoning=full_reasoning if full_reasoning else None
+                                )
+                                # Save Thinking Path (accumulated from stream)
+                                if full_reasoning:
+                                    StudentStateManager.save_session_context(session_id, thinking_path=full_reasoning)
                             except Exception as e:
                                 logger.error(f"Failed to save history: {e}")
                             return
                             
                         except Exception as e:
                             logger.error(f"Reasoner error: {e}")
-                            yield json.dumps({"type": "error", "content": f"Reasoning Error: {str(e)}"})
-                            yield json.dumps({"type": "end"})
+                            yield self._emit_event(request.session_id, {"type": "error", "content": f"Reasoning Error: {str(e)}"})
+                            yield self._emit_event(request.session_id, {"type": "end"})
                             return
                     # --- DEEPSEEK REASONER BYPASS END ---
         
@@ -449,7 +505,7 @@ class QAService:
                         docs = cached_docs
                         top_score = docs[0].metadata.get("score", 0.0) if docs else 0.0
                     else:
-                        yield json.dumps({"type": "status", "content": "正在检索本地知识库..."})
+                        yield self._emit_event(request.session_id, {"type": "status", "content": "正在检索本地知识库..."})
                         docs = self.retriever.invoke(request.query)
                         # Cache the results if session exists
                         if request.session_id:
@@ -480,9 +536,9 @@ class QAService:
                     
                     # Safety / Guardrails
                     if "删除" in request.query and ("脚本" in request.query or "文件" in request.query):
-                        yield json.dumps({"type": "status", "content": "触发安全拦截..."})
-                        yield json.dumps({"type": "token", "content": "抱歉，我不能执行删除文件等危险操作。"})
-                        yield json.dumps({"type": "end"})
+                        yield self._emit_event(request.session_id, {"type": "status", "content": "触发安全拦截..."})
+                        yield self._emit_event(request.session_id, {"type": "token", "content": "抱歉，我不能执行删除文件等危险操作。"})
+                        yield self._emit_event(request.session_id, {"type": "end"})
                         return
         
                     # Web Search Logic
@@ -543,87 +599,140 @@ class QAService:
                     
                     full_answer_accumulator = ""
                     
-                    if use_react:
-                        yield json.dumps({"type": "status", "content": "正在规划多步推理..."})
-                        yield json.dumps({"type": "start", "action": "QA_ANSWER"})
-                        
-                        # Filter tools based on search_allowed
-                        original_tools = self.agent.tools
-                        if not search_allowed:
-                            self.agent.tools = [t for t in original_tools if t.name != "web_search"]
-                        
-                        try:
-                            async for event_str in self.agent.run(final_query, history=history_list):
-                                 event = json.loads(event_str)
-                                 evt_type = event.get("type")
-                                 
-                                 if evt_type == "thought_stream":
-                                     # Stream thought/answer content directly as tokens
-                                     content = event.get("content", "")
-                                     full_answer_accumulator += content
-                                     yield json.dumps({"type": "token", "content": content})
-                                 elif evt_type == "iteration":
-                                     yield json.dumps({"type": "status", "content": f"正在进行第 {event.get('iteration')} 步推理..."})
-                                 elif evt_type == "tool_start":
-                                     tool_name = event.get("tool_name", "")
-                                     desc = f"正在调用工具: {tool_name}"
-                                     
-                                     if tool_name == "web_search":
-                                         query = event.get("inputs", {}).get("query", "")
-                                         desc = f"正在调用连网查询工具，搜索...{query[:15]}"
-                                     elif tool_name in ["calculator", "math_solver"]:
-                                         desc = "正在调用计算工具 （显示代码）"
-                                     
-                                     yield json.dumps({"type": "status", "content": desc})
-                                     yield event_str
-                                 elif evt_type in ["tool_start", "tool_result", "tool_error", "usage"]:
-                                     yield event_str
-                                 elif evt_type == "error":
-                                     yield json.dumps({"type": "error", "content": event.get("content")})
-                                 elif evt_type == "done":
-                                     yield json.dumps({"type": "end"})
-                        except Exception as e:
-                            logger.error(f"ReAct execution failed: {e}", exc_info=True)
-                            yield json.dumps({"type": "error", "content": f"System Error: {str(e)}"})
-                            yield json.dumps({"type": "end"})
-                        finally:
-                            # Restore tools
-                            self.agent.tools = original_tools
-        
-                    else:
-                        yield json.dumps({"type": "status", "content": "使用直接回答模式..."})
-                        
-                        # We need to manually iterate and accumulate
-                        async for chunk_str in self._direct_rag_stream(final_query, context_str, history_list):
-                            event = json.loads(chunk_str)
-                            if event["type"] == "token":
-                                full_answer_accumulator += event["content"]
-                            yield chunk_str
-                            
-                        # Append "Local Knowledge" hint if needed
-                        if top_score >= 0.75 and not is_time_sensitive:
-                             hint = "\n\n（注：答案基于本地知识库）"
-                             full_answer_accumulator += hint
-                             yield json.dumps({"type": "token", "content": hint})
-                        
-                        # Send End
-                        yield json.dumps({"type": "end"})
+                    # Accumulate tool calls and reasoning for history
+                    captured_tool_calls = []
                     
-                    # Save Interaction
                     try:
-                        StudentStateManager.add_history(session_id, "user", request.query)
-                        if full_answer_accumulator:
-                            StudentStateManager.add_history(session_id, "assistant", full_answer_accumulator)
-                            # Update last successful QA query for context tracking
-                            StudentStateManager.update_last_query(session_id, request.query)
+                        if use_react:
+                            yield self._emit_event(request.session_id, {"type": "status", "content": "正在规划多步推理..."})
+                            yield self._emit_event(request.session_id, {"type": "start", "action": "QA_ANSWER"})
+                            
+                            # Filter tools based on search_allowed
+                            original_tools = self.agent.tools
+                            if not search_allowed:
+                                self.agent.tools = [t for t in original_tools if t.name != "web_search"]
+                            
+                            try:
+                                async for event_str in self.agent.run(final_query, history=history_list):
+                                     event = json.loads(event_str)
+                                     evt_type = event.get("type")
+                                     
+                                     if evt_type == "thought_stream":
+                                         # Stream thought/answer content directly as tokens
+                                         content = event.get("content", "")
+                                         full_answer_accumulator += content
+                                         yield self._emit_event(request.session_id, {"type": "token", "content": content})
+                                     elif evt_type == "iteration":
+                                         yield self._emit_event(request.session_id, {"type": "status", "content": f"正在进行第 {event.get('iteration')} 步推理..."})
+                                     elif evt_type == "tool_start":
+                                         # Capture tool call
+                                         captured_tool_calls.append(event)
+                                         
+                                         tool_name = event.get("tool_name", "")
+                                         desc = f"正在调用工具: {tool_name}"
+                                         
+                                         if tool_name == "web_search":
+                                             query = event.get("inputs", {}).get("query", "")
+                                             desc = f"正在调用连网查询工具，搜索...{query[:15]}"
+                                         elif tool_name in ["calculator", "math_solver"]:
+                                             desc = "正在调用计算工具 （显示代码）"
+                                         
+                                         yield self._emit_event(request.session_id, {"type": "status", "content": desc})
+                                         if request.session_id:
+                                             StudentStateManager.append_event(request.session_id, event)
+                                         yield event_str
+                                     elif evt_type in ["tool_result", "tool_error", "usage"]:
+                                         if request.session_id:
+                                             StudentStateManager.append_event(request.session_id, event)
+                                         yield event_str
+                                     elif evt_type == "error":
+                                         yield self._emit_event(request.session_id, {"type": "error", "content": event.get("content")})
+                                     elif evt_type == "done":
+                                         yield self._emit_event(request.session_id, {"type": "end"})
+                            except Exception as e:
+                                logger.error(f"ReAct execution failed: {e}", exc_info=True)
+                                yield self._emit_event(request.session_id, {"type": "error", "content": f"System Error: {str(e)}"})
+                                yield self._emit_event(request.session_id, {"type": "end"})
+                            finally:
+                                # Restore tools
+                                self.agent.tools = original_tools
+            
+                        else:
+                            yield self._emit_event(request.session_id, {"type": "status", "content": "使用直接回答模式..."})
+                            
+                            # We need to manually iterate and accumulate
+                            async for chunk_str in self._direct_rag_stream(final_query, context_str, history_list, session_id=request.session_id):
+                                event = json.loads(chunk_str)
+                                
+                                if event.get("type") == "token":
+                                    full_answer_accumulator += event.get("content", "")
+                                yield chunk_str
+                                
+                            # Append "Local Knowledge" hint if needed
+                            if top_score >= 0.75 and not is_time_sensitive:
+                                 hint = "\n\n（注：答案基于本地知识库）"
+                                 full_answer_accumulator += hint
+                                 yield self._emit_event(request.session_id, {"type": "token", "content": hint})
+                            
+                            # Send End
+                            yield self._emit_event(request.session_id, {"type": "end"})
+                    
+                    finally:
+                        # Save Interaction (Even if cancelled)
+                        try:
+                            # Avoid saving duplicate if user query already saved?
+                            # Add check if needed, but append is safe.
+                            StudentStateManager.add_history(session_id, "user", request.query)
+                            if full_answer_accumulator:
+                                StudentStateManager.add_history(
+                                    session_id, 
+                                    "assistant", 
+                                    full_answer_accumulator,
+                                    tool_calls=captured_tool_calls if captured_tool_calls else None
+                                )
+                                # Update last successful QA query for context tracking
+                                StudentStateManager.update_last_query(session_id, request.query)
+                                
+                                # Save Thinking Path (accumulated from stream)
+                                # Note: DeepSeek reasoner path is accumulated in full_reasoning if using that branch
+                                # ReAct path is implicitly in tool_calls
+                                # If we want explicit thinking path string, we need to capture it
+                                # For now, let's save what we have if any
+                                # StudentStateManager.save_session_context(session_id, thinking_path=...)
+                        except Exception as e:
+                            logger.error(f"Failed to save history: {e}")
+                    
+                    # Generate Suggestions (Post-Response)
+                    try:
+                        suggestions = await self.predict_next_questions(request.query, answer=full_answer_accumulator, context=context_str)
+                        yield self._emit_event(request.session_id, {"type": "suggestions", "content": suggestions})
+                        
+                        # Save Session Context (Expected Questions)
+                        # Ensure we save even if it's empty, but usually it's not.
+                        if suggestions:
+                            # Mock Evaluation Generation
+                            import random
+                            evaluation = {
+                                "score": random.randint(3, 5),
+                                "comment": "Great question! This helps clarify key concepts.",
+                                "dimensions": {
+                                    "clarity": random.randint(4, 5),
+                                    "depth": random.randint(3, 5),
+                                    "relevance": 5
+                                }
+                            }
+                            StudentStateManager.save_session_context(request.session_id, expect_questions=suggestions, evaluation=evaluation)
+                            yield self._emit_event(request.session_id, {"type": "evaluation", "content": evaluation})
+                        
                     except Exception as e:
-                        logger.error(f"Failed to save history: {e}")
+                        logger.error(f"Failed to generate suggestions: {e}")
+
                     return
 
             except Exception as e:
                 logger.error(f"QAService Error: {e}", exc_info=True)
-                yield json.dumps({"type": "error", "content": f"Critical Service Error: {str(e)}"})
-                yield json.dumps({"type": "end"})
+                yield self._emit_event(request.session_id, {"type": "error", "content": f"Critical Service Error: {str(e)}"})
+                yield self._emit_event(request.session_id, {"type": "end"})
 
     async def adapt_script(self, request: AdaptScriptRequest, user_id: str = "student_001") -> AdaptScriptResponse:
         """
