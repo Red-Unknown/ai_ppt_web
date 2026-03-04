@@ -1,18 +1,22 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Home from '../pages/LoginHome.vue'
+import LoginHome from '../views/LoginHome.vue'
+import EnhancedChat from '../components/EnhancedChat.vue'
 
 const routes = [
-  // 登录主页
   {
     path: '/',
     name: 'Home',
-    component: Home
-
+    component: LoginHome
+  },
+  {
+    path: '/debug',
+    name: 'Debug',
+    component: EnhancedChat
   }
 ]
 
 const router = createRouter({
-  history: createWebHistory(process.env.BASE_URL),
+  history: createWebHistory(),
   routes
 })
 
