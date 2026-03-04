@@ -1,0 +1,28 @@
+{
+  "tool_name": "web_search",
+  "final_score": 70.97,
+  "dimension_scores": {
+    "functionality": 100.0,
+    "latency": 0.0,
+    "stability": 9.65,
+    "error_handling": 100.0,
+    "resource_usage": 100.0,
+    "scalability": 100.0,
+    "security": 100.0
+  },
+  "metrics": {
+    "success_rate": 1.0,
+    "avg_latency_ms": 2420.527219772339,
+    "latencies": [
+      4200.712442398071,
+      5348.185062408447,
+      823.3218193054199,
+      868.7281608581543,
+      861.6886138916016
+    ],
+    "error_test_pass_rate": 1.0,
+    "peak_memory_mb": 25.0,
+    "is_async": true,
+    "security_check": true
+  }
+}

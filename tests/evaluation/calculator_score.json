@@ -1,0 +1,28 @@
+{
+  "tool_name": "calculator",
+  "final_score": 78.31,
+  "dimension_scores": {
+    "functionality": 100.0,
+    "latency": 0.0,
+    "stability": 83.11,
+    "error_handling": 100.0,
+    "resource_usage": 100.0,
+    "scalability": 100.0,
+    "security": 100.0
+  },
+  "metrics": {
+    "success_rate": 1.0,
+    "avg_latency_ms": 6373.14658164978,
+    "latencies": [
+      4984.776496887207,
+      7302.282333374023,
+      5603.530645370483,
+      6488.274097442627,
+      7486.869335174561
+    ],
+    "error_test_pass_rate": 1.0,
+    "peak_memory_mb": 15.0,
+    "is_async": true,
+    "security_check": true
+  }
+}

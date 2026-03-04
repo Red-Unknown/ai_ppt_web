@@ -37,10 +37,12 @@
     │   │   │   ├── qa/
     │   │   │   └── ...
     │   │   └── workers/    # Celery 任务定义
-    │   ├── tests/          # 单元测试 & 集成测试
-    │   │   ├── test_websocket_chat.py
-    │   │   ├── test_sse_chat.py
-    │   │   └── ...
+    │   ├── tests/          # 测试目录 (Refactored)
+    │   │   ├── unit/       # 单元测试 (No External Deps)
+    │   │   ├── integration/# 集成测试 (DB/API/External)
+    │   │   ├── e2e/        # 端到端测试 (Full System)
+    │   │   ├── conftest.py # Pytest Configuration
+    │   │   └── pytest.ini  # Pytest Settings
     │   ├── main.py         # 启动入口
     │   └── alembic/        # 数据库迁移脚本
     ├── frontend/           # 前端工程 (Vue3)
@@ -56,6 +58,36 @@
         ├── .keep           # 占位文件
         ├── user_zhangsan/  # 张三的个人实验代码 (git ignored)
         └── user_lisi/      # 李四的个人实验代码 (git ignored)
+
+qa系统目录结构
+
+```text
+backend/app/services/qa/
+├── core/                   # 核心抽象与基类
+│   ├── __init__.py
+│   ├── agent_base.py       # Agent 抽象基类
+│   └── events.py           # 事件定义 (Thought, Action 等)
+├── agents/                 # 具体 Agent 实现
+│   ├── __init__.py
+│   ├── react.py            # ReActAgent (原 agent.py)
+│   └── teacher.py          # TeacherAgent (如果存在)
+├── tools/                  # 工具集 (原 skills/)
+│   ├── __init__.py
+│   ├── base.py             # BaseTool/BaseSkill
+│   ├── retrieval.py        # LocalKnowledgeTool (原 local_rag_skill.py)
+│   ├── web_search.py       # SearchTool
+│   ├── calculator.py       # MathTool
+│   └── manager.py          # ToolManager/SkillManager
+├── retrieval/              # 检索子系统
+│   ├── __init__.py
+│   └── tree_retriever.py   # TreeStructureRetriever (原 retriever.py)
+├── analysis/               # 理解与路由
+│   ├── __init__.py
+│   ├── intent.py           # QAAnalyzer (原 analyzer.py)
+│   └── router.py           # DialogueRouter
+├── service.py              # 服务入口 (保持不变，作为 Facade)
+└── __init__.py
+```
 
 ### 6.3 个人调试空间 (Sandbox Policy)
 

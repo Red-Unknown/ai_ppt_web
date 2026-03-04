@@ -26,6 +26,7 @@ class StudentState(BaseModel):
     current_topic: Optional[str] = Field(None, description="Topic currently being studied")
     confusion_count: int = Field(default=0, description="Number of times student expressed confusion on current topic")
     last_interaction_time: datetime = Field(default_factory=datetime.now, description="Timestamp of last interaction")
+    last_qa_query: Optional[str] = Field(None, description="The last successful QA query")
     
 class CreateProfileRequest(BaseModel):
     weaknesses: Optional[List[str]] = None
