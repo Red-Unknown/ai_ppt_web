@@ -94,8 +94,18 @@ def check_dependencies():
     log("Checking frontend dependencies...")
     # Check Frontend Deps
     node_modules = FRONTEND_DIR / "node_modules"
+    package_json = FRONTEND_DIR / "package.json"
+    
+    should_install = False
     if not node_modules.exists():
-        log("Frontend dependencies (node_modules) missing. Installing...")
+        should_install = True
+        log("Frontend dependencies (node_modules) missing.")
+    elif package_json.exists() and package_json.stat().st_mtime > node_modules.stat().st_mtime:
+        should_install = True
+        log("Frontend dependencies out of date.")
+
+    if should_install:
+        log("Installing frontend dependencies...")
         try:
             subprocess.run(
                 ["npm", "install"], 
@@ -111,7 +121,7 @@ def check_dependencies():
                 print("Error: Failed to install frontend dependencies.")
             sys.exit(1)
     else:
-        log("Frontend dependencies found.")
+        log("Frontend dependencies up to date.")
 
 def check_api_key():
     """Check if DEEPSEEK_API_KEY is set in environment variables."""
@@ -154,6 +164,8 @@ def start_backend(mode="dev"):
     log(f"Starting Backend (Mode: {mode})...")
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT_DIR)
+    # Suppress Python warnings to keep output clean
+    env["PYTHONWARNINGS"] = "ignore"
     
     cmd = [
         sys.executable, "-m", "uvicorn", 
@@ -236,6 +248,7 @@ def main():
         print(f"System Running in {args.mode.upper()} mode")
         print(f"Backend API: http://localhost:{BACKEND_PORT}")
         print(f"Frontend UI: http://localhost:{FRONTEND_PORT}")
+        print(f"Debug Page : http://localhost:{FRONTEND_PORT}/debug")
         print("Press Ctrl+C to stop.")
         print("="*40 + "\n")
 
