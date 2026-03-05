@@ -1,5 +1,5 @@
 <template>
-  <div class="login-card">
+  <div class="login-card" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave">
     <div class="card-content">
 
       
@@ -125,11 +125,14 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 // 路由实例
 const router = useRouter()
+
+// 事件
+const emit = defineEmits(['close', 'success'])
 
 // 表单数据
 const form = ref({
@@ -202,6 +205,9 @@ const handleSubmit = async () => {
     
     alert('登录成功！')
     
+    // 通知父组件登录成功
+    emit('success')
+    
     // 跳转到PPT展示页面
     router.push('/ppt-show')
   } catch (error) {
@@ -224,6 +230,62 @@ const handleRegister = () => {
 
 // 初始化
 generateCaptcha()
+
+// 鼠标悬停特效
+const loginCard = ref(null)
+let hoverCircle = null
+let isAnimating = false
+
+// 鼠标进入事件
+const handleMouseEnter = (e) => {
+  if (isAnimating) return
+  
+  // 计算鼠标在容器内的位置
+  const rect = e.target.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
+  
+  // 创建圆形元素
+  const circle = document.createElement('div')
+  circle.className = 'hover-circle in'
+  circle.style.left = x + 'px'
+  circle.style.top = y + 'px'
+  
+  e.target.appendChild(circle)
+  hoverCircle = circle
+  isAnimating = true
+  
+  // 动画结束后重置状态
+  setTimeout(() => {
+    isAnimating = false
+  }, 500)
+}
+
+// 鼠标离开事件
+const handleMouseLeave = (e) => {
+  if (isAnimating || !hoverCircle) return
+  
+  // 计算鼠标离开时的位置
+  const rect = e.target.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
+  
+  // 应用离开动画
+  hoverCircle.className = 'hover-circle out'
+  hoverCircle.style.left = x + 'px'
+  hoverCircle.style.top = y + 'px'
+  
+  isAnimating = true
+  
+  // 动画结束后移除元素
+  setTimeout(() => {
+    if (hoverCircle && hoverCircle.parentNode) {
+      hoverCircle.parentNode.removeChild(hoverCircle)
+    }
+    hoverCircle = null
+    isAnimating = false
+  }, 500)
+}
 </script>
 
 <style scoped>
@@ -252,6 +314,7 @@ generateCaptcha()
 .card-content {
   padding: 2.5rem;
   position: relative;
+  z-index: 1;
 }
 
 /* 登录头部 */
@@ -570,12 +633,59 @@ generateCaptcha()
   }
 }
 
+/* 鼠标悬停特效 */
+:global(.hover-circle) {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 215, 0, 0.3);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: -1;
+  will-change: transform, width, height;
+}
+
+:global(.hover-circle.in) {
+  width: 10px;
+  height: 10px;
+  animation: hoverIn 0.5s ease-out forwards;
+}
+
+:global(.hover-circle.out) {
+  width: 1200px;
+  height: 1200px;
+  animation: hoverOut 0.5s ease-in forwards;
+}
+
+@keyframes hoverIn {
+  0% {
+    width: 10px;
+    height: 10px;
+  }
+  100% {
+    width: 1200px;
+    height: 1200px;
+  }
+}
+
+@keyframes hoverOut {
+  0% {
+    width: 1200px;
+    height: 1200px;
+  }
+  100% {
+    width: 0;
+    height: 0;
+  }
+}
+
 /* 减少动画偏好 */
 @media (prefers-reduced-motion: reduce) {
   .login-card,
   .input-wrapper,
-  .login-button {
+  .login-button,
+  :global(.hover-circle) {
     transition: none;
+    animation: none;
   }
 }
 </style>

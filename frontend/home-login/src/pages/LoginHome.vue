@@ -56,14 +56,14 @@
     <!-- 登录弹窗 -->
     <div v-if="showLoginPopup" class="popup-overlay" @click="closeLoginPopup">
       <div class="popup-content" @click.stop>
-        <LoginPopup @close="closeLoginPopup" />
+        <LoginPopup @close="closeLoginPopup" @success="handleLoginSuccess" />
       </div>
     </div>
     
     <!-- 注册弹窗 -->
     <div v-if="showRegisterPopup" class="popup-overlay" @click="closeRegisterPopup">
       <div class="popup-content" @click.stop>
-        <RegisterPopup @close="closeRegisterPopup" />
+        <RegisterPopup @close="closeRegisterPopup" @success="handleRegisterSuccess" />
       </div>
     </div>
   </div>
@@ -90,6 +90,16 @@ const closeLoginPopup = () => {
 
 // 关闭注册弹窗
 const closeRegisterPopup = () => {
+  showRegisterPopup.value = false
+}
+
+// 处理登录成功
+const handleLoginSuccess = () => {
+  showLoginPopup.value = false
+}
+
+// 处理注册成功
+const handleRegisterSuccess = () => {
   showRegisterPopup.value = false
 }
 </script>

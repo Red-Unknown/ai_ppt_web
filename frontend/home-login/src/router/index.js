@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginHome from '../pages/LoginHome.vue'
 import PptShow from '../pages/PptShow.vue'
+import PptTeach from '../pages/PptTeach.vue'
 const routes = [
   {
     path: '/',
@@ -16,6 +17,11 @@ const routes = [
     path: '/ppt-show',
     name: 'PptShow',
     component: PptShow
+  },
+  {
+    path: '/ppt-teach',
+    name: 'PptTeach',
+    component: PptTeach
   }
 ]
 

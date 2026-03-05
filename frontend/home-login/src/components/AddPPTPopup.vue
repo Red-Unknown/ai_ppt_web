@@ -112,7 +112,7 @@
               ref="fileInput" 
               type="file" 
               class="file-input"
-              accept=".ppt,.pptx,.mp4,.avi,.flv,.wmv,.mov,.mkv,.mp3,.wav,.wma,.flac"
+              accept=".pptx,.pdf,.jpg"
               @change="handleLocalFileSelect"
             >
             <div class="upload-content">
@@ -127,9 +127,7 @@
             <ul class="rules-list">
               <li class="rule-item">单次限制：单次只能上传1个文件</li>
               <li class="rule-item">大小限制：文件大小不超过1024M（1GB）</li>
-              <li class="rule-item">支持格式：</li>
-              <li class="rule-item indent">视频：mp4、avi、flv、wmv、mov、mkv</li>
-              <li class="rule-item indent">音频：mp3、wav、wma、flac</li>
+              <li class="rule-item">支持格式：pptx、pdf、jpg</li>
             </ul>
           </div>
           
@@ -188,12 +186,22 @@ const mockFiles = ref([
 
 // 过滤后的文件列表
 const filteredFiles = computed(() => {
-  if (!searchKeyword.value) {
-    return mockFiles.value
+  let files = mockFiles.value
+  
+  // 过滤文件格式
+  files = files.filter(file => {
+    const ext = file.name.toLowerCase().split('.').pop()
+    return ['pptx', 'pdf', 'jpg'].includes(ext)
+  })
+  
+  // 搜索过滤
+  if (searchKeyword.value) {
+    files = files.filter(file => 
+      file.name.toLowerCase().includes(searchKeyword.value.toLowerCase())
+    )
   }
-  return mockFiles.value.filter(file => 
-    file.name.toLowerCase().includes(searchKeyword.value.toLowerCase())
-  )
+  
+  return files
 })
 
 // 是否可以确认
@@ -246,6 +254,14 @@ const handleLocalFileSelect = (event) => {
       alert('文件大小不能超过1GB')
       return
     }
+    
+    // 检查文件格式
+    const ext = file.name.toLowerCase().split('.').pop()
+    if (!['pptx', 'pdf', 'jpg'].includes(ext)) {
+      alert('只支持.pptx、.pdf和.jpg格式的文件')
+      return
+    }
+    
     localFile.value = file
   }
 }
@@ -259,6 +275,14 @@ const handleFileDrop = (event) => {
       alert('文件大小不能超过1GB')
       return
     }
+    
+    // 检查文件格式
+    const ext = file.name.toLowerCase().split('.').pop()
+    if (!['pptx', 'pdf', 'jpg'].includes(ext)) {
+      alert('只支持.pptx、.pdf和.jpg格式的文件')
+      return
+    }
+    
     localFile.value = file
   }
 }
