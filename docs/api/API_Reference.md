@@ -200,6 +200,50 @@
 **响应**:
 ```json
 {
+  "status": "reloaded"
+}
+```
+
+### 3.5 数学流式计算 (Math Streaming Calculation)
+
+#### POST `/api/v1/chat/math/stream`
+流式数学计算端点。用于实时生成代码并执行，返回流式结果。
+
+- **协议**: HTTP/1.1 (Server-Sent Events)
+- **请求头**: `Content-Type: application/json`
+- **请求体**:
+  ```json
+  {
+    "query": "计算矩阵[[1,2],[3,4]]和[[5,6],[7,8]]的乘积",
+    "session_id": "sess_123"
+  }
+  ```
+
+- **响应格式** (服务端 -> 客户端):
+  服务端通过 Server-Sent Events (SSE) 流式发送数据，每条消息包含 `type` 和 `content`。
+
+  **事件类型**:
+  1. `code_delta`: 生成的代码片段。
+  2. `execution_result`: 代码执行结果（通常是最后一条语句的返回值）。
+  3. `execution_error`: 代码执行出错时的错误信息。
+  4. `explanation_delta`: 对结果的解释文本片段。
+  5. `[DONE]`: 流结束标志。
+
+  **示例流**:
+  ```text
+  data: {"type": "code_delta", "content": "import numpy as np"}
+
+  data: {"type": "code_delta", "content": "\na = np.array([[1,2],[3,4]])"}
+
+  data: {"type": "execution_result", "content": "[[19. 22.],[43. 50.]]"}
+
+  data: {"type": "explanation_delta", "content": "矩阵乘积的结果是"}
+
+  data: [DONE]
+  ```
+
+```json
+{
   "status": "success",
   "message": "Configuration reloaded."
 }

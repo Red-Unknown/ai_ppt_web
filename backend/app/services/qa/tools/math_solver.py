@@ -31,10 +31,13 @@ class MathSolver:
             Problem: {query}
             
             Rules:
-            1. Use ONLY standard libraries (math, random, datetime).
-            2. Do NOT use input(), print(), or external libraries.
-            3. Store the final result in a variable named `result`.
-            4. The code must be concise and safe.
+            1. Use ONLY standard libraries (math, random, datetime) and available scientific libraries (numpy, scipy, sympy, pandas, matplotlib.pyplot, math_kernels).
+            2. For high-performance tasks, PREFER using `math_kernels` (Cython optimized):
+               - `math_kernels.matrix_multiply(a, b)` for matrix multiplication.
+               - `math_kernels.numerical_integration_trapezoidal(y, dx)` for integration.
+               - `math_kernels.fast_statistics(data)` for mean/variance.
+            3. Do NOT use input(), print(), or external libraries.
+            4. Store the final result in a variable named `result`.
             5. If the problem is "Solve 2x + 3 = 7", output code to calculate x.
             
             Output ONLY the Python code. No markdown formatting.

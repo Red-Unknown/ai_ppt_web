@@ -104,6 +104,63 @@ async def mock_edge_filter(query: str) -> tuple[bool, str]:
         return False, "Edge Security: Malicious content detected."
     return True, "Passed"
 
+@router.post("/math/stream")
+async def stream_math_calculation(
+    request: ChatRequest = Body(...),
+    qa_service: QAService = Depends(get_qa_service)
+):
+    """
+    Streaming Math Calculation Endpoint.
+    
+    1. Generates Python code from natural language query.
+    2. Streams code chunks as they are generated.
+    3. Executes code chunks on the fly (where possible) and streams results.
+    4. Returns final explanation.
+    
+    Response format (Server-Sent Events):
+    data: {"type": "code", "content": "import numpy..."}
+    data: {"type": "result", "content": "100"}
+    data: {"type": "explanation", "content": "The result is 100."}
+    """
+    from backend.app.services.qa.tools.streaming_math_solver import StreamingMathExecutor
+    from backend.app.services.qa.tools.math_solver import MathSolver
+    
+    async def event_generator():
+        # Initialize solver
+        solver = MathSolver()
+        
+        # 1. Stream Code Generation
+        query = request.query
+        full_code = ""
+        
+        async for chunk in solver.code_gen_chain.astream({"query": query}):
+            full_code += chunk
+            # Stream code delta
+            yield f'data: {json.dumps({"type": "code_delta", "content": chunk})}\n\n'
+            
+        # 2. Execute
+        clean_code = full_code.replace("```python", "").replace("```", "").strip()
+        
+        from backend.app.utils.sandbox import SafeCodeExecutor
+        try:
+            result = SafeCodeExecutor.execute(clean_code)
+            yield f'data: {json.dumps({"type": "execution_result", "content": result})}\n\n'
+        except Exception as e:
+             result = f"Error: {str(e)}"
+             yield f'data: {json.dumps({"type": "execution_error", "content": result})}\n\n'
+
+        # 3. Stream Explanation
+        async for chunk in solver.explanation_chain.astream({
+            "query": query,
+            "code": clean_code,
+            "result": result
+        }):
+            yield f'data: {json.dumps({"type": "explanation_delta", "content": chunk})}\n\n'
+            
+        yield 'data: [DONE]\n\n'
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
