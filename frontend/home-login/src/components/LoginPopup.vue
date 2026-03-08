@@ -122,17 +122,27 @@
       </div>
     </div>
   </div>
+  
+  <!-- 注册弹窗 -->
+  <RegisterPopup
+    v-if="showRegisterPopup"
+    @close="closeRegisterPopup"
+    @success="handleRegisterSuccess"
+  />
+  
+
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import RegisterPopup from './RegisterPopup.vue'
 
 // 路由实例
 const router = useRouter()
 
 // 事件
-const emit = defineEmits(['close', 'success'])
+const emit = defineEmits(['close', 'success', 'register', 'forgot'])
 
 // 表单数据
 const form = ref({
@@ -145,6 +155,7 @@ const form = ref({
 // 状态
 const isSubmitting = ref(false)
 const captchaCode = ref('')
+const showRegisterPopup = ref(false)
 
 // 生成验证码
 const generateCaptcha = () => {
@@ -218,14 +229,29 @@ const handleSubmit = async () => {
   }
 }
 
-// 忘记密码
+// 显示忘记密码弹窗
 const handleForgotPassword = () => {
-  alert('忘记密码功能即将上线')
+  // 发出忘记密码事件
+  emit('forgot')
 }
 
-// 注册
+
+
+// 显示注册弹窗
 const handleRegister = () => {
-  alert('注册功能即将上线')
+  emit('register')
+}
+
+// 关闭注册弹窗
+const closeRegisterPopup = () => {
+  showRegisterPopup.value = false
+}
+
+// 注册成功处理
+const handleRegisterSuccess = () => {
+  showRegisterPopup.value = false
+  // 通知父组件注册成功
+  emit('success')
 }
 
 // 初始化
@@ -295,11 +321,11 @@ const handleMouseLeave = (e) => {
   z-index: 3;
   width: 100%;
   max-width: 400px;
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 1);
   backdrop-filter: blur(24px);
   border-radius: 20px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 1);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
@@ -389,7 +415,7 @@ const handleMouseLeave = (e) => {
   width: 100%;
   padding: 1rem 1rem 1rem 3rem;
   border: none;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.8);
   font-size: 0.9375rem;
   color: #1e293b;
   outline: none;

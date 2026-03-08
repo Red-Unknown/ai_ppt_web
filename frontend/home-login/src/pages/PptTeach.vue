@@ -10,74 +10,31 @@
           <path d="M19 12H5M12 19l-7-7 7-7"></path>
         </svg>
       </button>
-      <div class="navbar-logo">AI智教</div>
-      <div class="navbar-tabs">
-        <button class="tab-button active" @click="activeTab = 'lesson'">教案区</button>
-        <button class="tab-button" :class="{ active: activeTab === 'ppt' }" @click="togglePptPanel">PPT区</button>
-      </div>
+
       <div class="navbar-user">
         <div class="user-avatar"></div>
-        <span class="user-greeting">你好，同学</span>
       </div>
     </nav>
     
     <!-- 主内容区 -->
     <div class="main-content">
-      <!-- 左侧侧边栏 -->
-      <div class="sidebar" :class="{ expanded: sidebarExpanded }">
-        <button class="sidebar-toggle" @click="toggleSidebar">
-          <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 12h18M3 6h18M3 18h18"></path>
-          </svg>
-        </button>
-        <div class="sidebar-content">
-          <button class="sidebar-button" @click="handleSidebarAction('qa')">
-            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="16" x2="12" y2="12"></line>
-              <line x1="12" y1="8" x2="12.01" y2="8"></line>
-            </svg>
-            <span>答疑集</span>
-          </button>
-          <button class="sidebar-button" @click="handleSidebarAction('note')">
-            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            <span>写笔记</span>
-          </button>
-          <button class="sidebar-button" @click="handleSidebarAction('mindmap')">
-            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="18" cy="5" r="3"></circle>
-              <circle cx="6" cy="12" r="3"></circle>
-              <circle cx="18" cy="19" r="3"></circle>
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-            </svg>
-            <span>思维导图</span>
-          </button>
-          <button class="sidebar-button" @click="handleSidebarAction('summary')">
-            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            <span>PPT概括</span>
-          </button>
-        </div>
-      </div>
-      
       <!-- 内容区域 -->
       <div class="content-area" :class="{ 'ppt-collapsed': pptCollapsed }">
         <!-- 教案区 -->
         <div class="lesson-panel" :style="{ width: lessonWidth + '%' }">
           <div class="panel-header">
             <h2>教案内容</h2>
+            <button class="state-toggle-button" @click="toggleLessonPanelState" :class="{ active: lessonPanelState }">
+              <svg v-if="lessonPanelState" class="state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+              <svg v-else class="state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <line x1="23" y1="9" x2="17" y2="15"></line>
+                <line x1="17" y1="9" x2="23" y2="15"></line>
+              </svg>
+            </button>
           </div>
           <div class="panel-content">
             <div class="lesson-content">
@@ -102,16 +59,18 @@
               <p>3. 应用三角形知识解决实际问题</p>
             </div>
           </div>
-          
-          <!-- 悬浮提问框 -->
-          <div class="question-box">
-            <input type="text" placeholder="输入你的问题..." class="question-input" v-model="questionText">
-            <button class="send-button" @click="sendQuestion">发送</button>
-          </div>
         </div>
         
         <!-- 滑块 -->
-        <div class="resizer" @mousedown="startResize" :class="{ dragging: isResizing }"></div>
+        <div class="resizer" @mousedown="startResize" :class="{ dragging: isResizing }" 
+             @touchstart="startResizeTouch" 
+             :style="{ cursor: isResizing ? 'grabbing' : 'grab' }"
+             unselectable="on"
+             onselectstart="return false;"
+             onmousedown="return false;">
+          <div class="resizer-handle"></div>
+          <div class="resizer-tooltip" v-if="isResizing">{{ Math.round(lessonWidth) }}% | {{ Math.round(pptWidth) }}%</div>
+        </div>
         
         <!-- PPT区 -->
         <div class="ppt-panel" :class="{ collapsed: pptCollapsed }" :style="{ width: pptWidth + '%' }">
@@ -127,15 +86,113 @@
             <div class="ppt-content">
               <img src="https://via.placeholder.com/800x450/FFD700/333?text=三角形面积计算" alt="PPT内容" class="ppt-image">
             </div>
+            
+            <!-- 悬浮提问框 -->
+            <div class="question-box" @click="showPresets">
+              <input type="text" placeholder="输入你的问题..." class="question-input" v-model="questionText">
+              <button class="send-button" @click.stop="sendQuestion">发送</button>
+              <!-- 预设问题区域 -->
+              <div class="preset-questions" v-if="showPresetQuestions">
+                <div 
+                  v-for="(question, index) in presetQuestions" 
+                  :key="index"
+                  class="preset-question-item"
+                  @click.stop="selectPresetQuestion(question)"
+                >
+                  {{ question }}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+      
+      <!-- 右侧侧边栏 -->
+      <div class="sidebar" :class="{ expanded: sidebarExpanded }">
+        <button class="sidebar-toggle" @click="toggleSidebar">
+          <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12h18M3 6h18M3 18h18"></path>
+          </svg>
+        </button>
+        <div class="sidebar-content">
+          <button class="sidebar-button" @click="openAnserPopup">
+            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span>答疑集</span>
+          </button>
+          <!-- 方案1: 钢笔图标 -->
+          <button class="sidebar-button" @click="handleSidebarAction('note')">
+            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+              <path d="m15 5 4 4"></path>
+            </svg>
+            <span>写笔记</span>
+          </button>
+          
+          <!-- 方案2: 铅笔图标 -->
+          <!-- <button class="sidebar-button" @click="handleSidebarAction('note')">
+            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"></path>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            </svg>
+            <span>写笔记</span>
+          </button> -->
+          
+          <!-- 方案3: 毛笔图标 -->
+          <!-- <button class="sidebar-button" @click="handleSidebarAction('note')">
+            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7 19l-4 1 1-4L17 3z"></path>
+              <path d="M15 5 9 11"></path>
+              <path d="M13 7 9 11"></path>
+            </svg>
+            <span>写笔记</span>
+          </button> -->
+          <button class="sidebar-button" @click="handleSidebarAction('export')">
+            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>导出分享</span>
+          </button>
+          <button class="sidebar-button" @click="handleSidebarAction('summary')">
+            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <span>PPT概括</span>
+          </button>
+        </div>
+      </div>
     </div>
+    
+    <!-- 答疑集弹窗 -->
+    <AnserPopup 
+      :is-visible="anserPopupVisible"
+      :conversations="conversations"
+      @close="closeAnserPopup"
+    />
+    
+    <!-- PPT概括弹窗 -->
+    <IntroductPopup 
+      :is-visible="introductPopupVisible"
+      :ppt-introduction="pptIntroduction"
+      :mindmap-data="mindmapData"
+      @close="closeIntroductPopup"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import AnserPopup from '../components/AnserPopup.vue'
+import IntroductPopup from '../components/IntroductPopup.vue'
 
 // 状态
 const activeTab = ref('lesson')
@@ -145,6 +202,70 @@ const lessonWidth = ref(50)
 const pptWidth = ref(50)
 const isResizing = ref(false)
 const questionText = ref('')
+const showPresetQuestions = ref(false)
+// 答疑集弹窗状态
+const anserPopupVisible = ref(false)
+const conversations = ref([])
+// PPT概括弹窗状态
+const introductPopupVisible = ref(false)
+// 教案区状态切换按钮
+const lessonPanelState = ref(localStorage.getItem('lessonPanelState') === 'true')
+// PPT简介数据
+const pptIntroduction = ref('本PPT主要讲解三角形的基本性质和面积计算方法，包括三角形的定义、分类、基本性质，以及面积计算公式的推导和应用。通过实际例题和练习，帮助学生掌握三角形面积计算的核心概念和解题技巧。')
+// 思维导图数据
+const mindmapData = ref({
+  text: '三角形面积计算',
+  children: [
+    {
+      text: '基本概念',
+      children: [
+        { text: '三角形定义' },
+        { text: '三角形分类' },
+        { text: '三角形基本性质' }
+      ]
+    },
+    {
+      text: '面积计算公式',
+      children: [
+        { text: '基本公式: S = 1/2 × 底 × 高' },
+        { text: '公式推导' },
+        { text: '单位换算' }
+      ]
+    },
+    {
+      text: '实际应用',
+      children: [
+        { text: '例题解析' },
+        { text: '练习题' },
+        { text: '生活中的应用' }
+      ]
+    },
+    {
+      text: '常见问题',
+      children: [
+        { text: '高的确定' },
+        { text: '面积单位' },
+        { text: '复杂三角形计算' }
+      ]
+    }
+  ]
+})
+
+// 切换教案区状态
+const toggleLessonPanelState = () => {
+  lessonPanelState.value = !lessonPanelState.value
+  // 保存状态到localStorage
+  localStorage.setItem('lessonPanelState', lessonPanelState.value.toString())
+}
+
+// 预设问题数据
+const presetQuestions = [
+  '三角形面积公式是什么？',
+  '如何计算三角形的高？',
+  '三角形的基本性质有哪些？',
+  '如何应用三角形知识解决实际问题？',
+  '三角形和其他几何图形的关系是什么？'
+]
 
 // 处理返回
 const handleBack = () => {
@@ -159,7 +280,20 @@ const toggleSidebar = () => {
 // 处理侧边栏动作
 const handleSidebarAction = (action) => {
   console.log(`执行${action}操作`)
-  // 这里可以添加实际的操作逻辑
+  if (action === 'summary') {
+    openIntroductPopup()
+  }
+  // 这里可以添加其他操作逻辑
+}
+
+// 打开PPT概括弹窗
+const openIntroductPopup = () => {
+  introductPopupVisible.value = true
+}
+
+// 关闭PPT概括弹窗
+const closeIntroductPopup = () => {
+  introductPopupVisible.value = false
 }
 
 // 切换PPT面板
@@ -174,59 +308,356 @@ const togglePptPanel = () => {
   }
 }
 
-// 开始调整大小
+// 滑动状态
+const startX = ref(0)
+const startWidth = ref(0)
+const velocity = ref(0)
+const lastX = ref(0)
+const lastTime = ref(0)
+const animationFrameId = ref(null)
+
+// 开始调整大小（鼠标）
 const startResize = (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+  
+  // 禁止文本选择
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'grabbing'
+  
   isResizing.value = true
+  startX.value = e.clientX
+  startWidth.value = lessonWidth.value
+  lastX.value = e.clientX
+  lastTime.value = performance.now()
+  velocity.value = 0
+  
   document.addEventListener('mousemove', resize)
   document.addEventListener('mouseup', stopResize)
+  document.addEventListener('mouseleave', stopResize)
 }
 
-// 调整大小
+// 开始调整大小（触摸）
+const startResizeTouch = (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+  
+  // 禁止文本选择
+  document.body.style.userSelect = 'none'
+  
+  isResizing.value = true
+  const touch = e.touches[0]
+  startX.value = touch.clientX
+  startWidth.value = lessonWidth.value
+  lastX.value = touch.clientX
+  lastTime.value = performance.now()
+  velocity.value = 0
+  
+  document.addEventListener('touchmove', resizeTouch)
+  document.addEventListener('touchend', stopResizeTouch)
+  document.addEventListener('touchcancel', stopResizeTouch)
+}
+
+// 调整大小（鼠标）
 const resize = (e) => {
   if (!isResizing.value) return
+  e.preventDefault()
+  e.stopPropagation()
   
-  const contentArea = document.querySelector('.content-area')
-  const rect = contentArea.getBoundingClientRect()
-  const width = e.clientX - rect.left
-  const percentage = (width / rect.width) * 100
+  const currentTime = performance.now()
+  const deltaTime = currentTime - lastTime.value
+  const deltaX = e.clientX - lastX.value
   
-  // 磁吸效果
-  let newWidth = percentage
-  if (Math.abs(newWidth - 50) < 5) {
-    newWidth = 50
-  } else if (newWidth < 10) {
-    newWidth = 0
-    pptCollapsed.value = true
-  } else if (newWidth > 90) {
-    newWidth = 100
-    pptCollapsed.value = true
-  } else {
-    pptCollapsed.value = false
+  // 计算速度
+  if (deltaTime > 0) {
+    velocity.value = deltaX / deltaTime
   }
   
-  lessonWidth.value = newWidth
-  pptWidth.value = 100 - newWidth
+  lastX.value = e.clientX
+  lastTime.value = currentTime
+  
+  // 性能优化：使用requestAnimationFrame
+  if (!animationFrameId.value) {
+    animationFrameId.value = requestAnimationFrame(() => {
+      const contentArea = document.querySelector('.content-area')
+      const rect = contentArea.getBoundingClientRect()
+      let width = e.clientX - rect.left
+      let percentage = (width / rect.width) * 100
+      
+      // 设置最小和最大宽度阈值
+      const minWidth = 20 // 最小宽度20%
+      const maxWidth = 80 // 最大宽度80%
+      
+      // 平滑的边界限制效果
+      if (percentage < minWidth) {
+        // 接近最小边界时提供阻力
+        const distance = minWidth - percentage
+        const resistance = 1 + (distance / 10)
+        percentage = minWidth - (distance / resistance)
+      } else if (percentage > maxWidth) {
+        // 接近最大边界时提供阻力
+        const distance = percentage - maxWidth
+        const resistance = 1 + (distance / 10)
+        percentage = maxWidth + (distance / resistance)
+      }
+      
+      // 确保不超出边界
+      percentage = Math.max(minWidth, Math.min(maxWidth, percentage))
+      
+      // 磁吸效果
+      let newWidth = percentage
+      if (Math.abs(newWidth - 50) < 5) {
+        newWidth = 50
+      }
+      
+      lessonWidth.value = newWidth
+      pptWidth.value = 100 - newWidth
+      pptCollapsed.value = false
+      
+      animationFrameId.value = null
+    })
+  }
 }
 
-// 停止调整大小
+// 调整大小（触摸）
+const resizeTouch = (e) => {
+  if (!isResizing.value) return
+  e.preventDefault()
+  e.stopPropagation()
+  
+  const touch = e.touches[0]
+  const currentTime = performance.now()
+  const deltaTime = currentTime - lastTime.value
+  const deltaX = touch.clientX - lastX.value
+  
+  // 计算速度
+  if (deltaTime > 0) {
+    velocity.value = deltaX / deltaTime
+  }
+  
+  lastX.value = touch.clientX
+  lastTime.value = currentTime
+  
+  // 性能优化：使用requestAnimationFrame
+  if (!animationFrameId.value) {
+    animationFrameId.value = requestAnimationFrame(() => {
+      const contentArea = document.querySelector('.content-area')
+      const rect = contentArea.getBoundingClientRect()
+      let width = touch.clientX - rect.left
+      let percentage = (width / rect.width) * 100
+      
+      // 设置最小和最大宽度阈值
+      const minWidth = 20 // 最小宽度20%
+      const maxWidth = 80 // 最大宽度80%
+      
+      // 平滑的边界限制效果
+      if (percentage < minWidth) {
+        // 接近最小边界时提供阻力
+        const distance = minWidth - percentage
+        const resistance = 1 + (distance / 10)
+        percentage = minWidth - (distance / resistance)
+      } else if (percentage > maxWidth) {
+        // 接近最大边界时提供阻力
+        const distance = percentage - maxWidth
+        const resistance = 1 + (distance / 10)
+        percentage = maxWidth + (distance / resistance)
+      }
+      
+      // 确保不超出边界
+      percentage = Math.max(minWidth, Math.min(maxWidth, percentage))
+      
+      // 磁吸效果
+      let newWidth = percentage
+      if (Math.abs(newWidth - 50) < 5) {
+        newWidth = 50
+      }
+      
+      lessonWidth.value = newWidth
+      pptWidth.value = 100 - newWidth
+      pptCollapsed.value = false
+      
+      animationFrameId.value = null
+    })
+  }
+}
+
+// 停止调整大小（鼠标）
 const stopResize = () => {
+  if (!isResizing.value) return
+  
   isResizing.value = false
+  document.body.style.userSelect = ''
+  document.body.style.cursor = ''
+  
+  // 应用惯性效果
+  applyInertia()
+  
   document.removeEventListener('mousemove', resize)
   document.removeEventListener('mouseup', stopResize)
+  document.removeEventListener('mouseleave', stopResize)
+}
+
+// 停止调整大小（触摸）
+const stopResizeTouch = () => {
+  if (!isResizing.value) return
+  
+  isResizing.value = false
+  document.body.style.userSelect = ''
+  
+  // 应用惯性效果
+  applyInertia()
+  
+  document.removeEventListener('touchmove', resizeTouch)
+  document.removeEventListener('touchend', stopResizeTouch)
+  document.removeEventListener('touchcancel', stopResizeTouch)
+}
+
+// 应用惯性效果
+const applyInertia = () => {
+  const contentArea = document.querySelector('.content-area')
+  const rect = contentArea.getBoundingClientRect()
+  let currentWidth = lessonWidth.value
+  let currentVelocity = velocity.value * 10 // 放大速度影响
+  const friction = 0.9
+  const minVelocity = 0.1
+  
+  // 设置最小和最大宽度阈值
+  const minWidth = 20 // 最小宽度20%
+  const maxWidth = 80 // 最大宽度80%
+  
+  const animateInertia = () => {
+    if (Math.abs(currentVelocity) < minVelocity) {
+      // 磁吸效果
+      if (Math.abs(currentWidth - 50) < 5) {
+        currentWidth = 50
+      }
+      
+      // 确保不超出边界
+      currentWidth = Math.max(minWidth, Math.min(maxWidth, currentWidth))
+      
+      lessonWidth.value = currentWidth
+      pptWidth.value = 100 - currentWidth
+      pptCollapsed.value = false
+      return
+    }
+    
+    currentVelocity *= friction
+    const deltaWidth = (currentVelocity / rect.width) * 100
+    currentWidth += deltaWidth
+    
+    // 平滑的边界限制效果
+    if (currentWidth < minWidth) {
+      // 接近最小边界时提供阻力
+      const distance = minWidth - currentWidth
+      const resistance = 1 + (distance / 10)
+      currentWidth = minWidth - (distance / resistance)
+      currentVelocity *= 0.8 // 减小速度
+    } else if (currentWidth > maxWidth) {
+      // 接近最大边界时提供阻力
+      const distance = currentWidth - maxWidth
+      const resistance = 1 + (distance / 10)
+      currentWidth = maxWidth + (distance / resistance)
+      currentVelocity *= 0.8 // 减小速度
+    }
+    
+    // 确保不超出边界
+    currentWidth = Math.max(minWidth, Math.min(maxWidth, currentWidth))
+    
+    lessonWidth.value = currentWidth
+    pptWidth.value = 100 - currentWidth
+    pptCollapsed.value = false
+    
+    requestAnimationFrame(animateInertia)
+  }
+  
+  if (Math.abs(currentVelocity) > minVelocity) {
+    requestAnimationFrame(animateInertia)
+  }
 }
 
 // 发送问题
 const sendQuestion = () => {
   if (questionText.value.trim()) {
     console.log('发送问题:', questionText.value)
+    // 发送到答疑集
+    sendToAnser(questionText.value.trim())
+    // 打开答疑集弹窗
+    openAnserPopup()
+    // 清空输入框
     questionText.value = ''
   }
 }
+
+// 显示预设问题
+const showPresets = () => {
+  showPresetQuestions.value = true
+}
+
+// 选择预设问题
+const selectPresetQuestion = (question) => {
+  questionText.value = question
+  showPresetQuestions.value = false
+}
+
+// 打开答疑集弹窗
+const openAnserPopup = () => {
+  anserPopupVisible.value = true
+}
+
+// 关闭答疑集弹窗
+const closeAnserPopup = () => {
+  anserPopupVisible.value = false
+}
+
+// 发送消息到答疑集
+const sendToAnser = (message) => {
+  // 添加用户消息
+  const userMessage = {
+    id: Date.now(),
+    content: message,
+    isUser: true,
+    timestamp: new Date().toLocaleTimeString()
+  }
+  conversations.value.push(userMessage)
+  
+  // 模拟AI回复
+  setTimeout(() => {
+    const aiMessage = {
+      id: Date.now() + 1,
+      content: `这是对"${message}"的AI回复`,
+      isUser: false,
+      timestamp: new Date().toLocaleTimeString()
+    }
+    conversations.value.push(aiMessage)
+  }, 1000)
+}
+
+// 隐藏预设问题
+const hidePresets = () => {
+  // 延迟隐藏，以便可以点击预设问题
+  setTimeout(() => {
+    showPresetQuestions.value = false
+  }, 200)
+}
+
+// 点击页面其他区域隐藏预设问题
+const handleClickOutside = (e) => {
+  const questionBox = document.querySelector('.question-box')
+  if (questionBox && !questionBox.contains(e.target)) {
+    showPresetQuestions.value = false
+  }
+}
+
+// 挂载时添加全局点击事件监听器
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
 
 // 清理事件监听器
 onUnmounted(() => {
   document.removeEventListener('mousemove', resize)
   document.removeEventListener('mouseup', stopResize)
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -317,31 +748,7 @@ onUnmounted(() => {
   color: #333;
 }
 
-.navbar-tabs {
-  display: flex;
-  gap: 16px;
-}
 
-.tab-button {
-  padding: 8px 16px;
-  border: none;
-  background: transparent;
-  color: #666;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border-bottom: 2px solid transparent;
-}
-
-.tab-button:hover {
-  color: #FF8A3D;
-}
-
-.tab-button.active {
-  color: #FF8A3D;
-  border-bottom: 2px solid #FF8A3D;
-}
 
 .navbar-user {
   display: flex;
@@ -381,14 +788,15 @@ onUnmounted(() => {
   padding-top: 64px;
   box-sizing: border-box;
   display: flex;
+  flex-direction: row;
 }
 
-/* 左侧侧边栏 */
+/* 右侧侧边栏 */
 .sidebar {
   width: 60px;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
-  border-right: 1px solid #F0E0D0;
+  border-left: 1px solid #F0E0D0;
   transition: width 0.3s ease;
   position: relative;
   z-index: 10;
@@ -479,6 +887,15 @@ onUnmounted(() => {
   height: calc(100vh - 64px);
   position: relative;
   transition: all 0.4s ease;
+  order: 1;
+  /* 硬件加速 */
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* 侧边栏顺序 */
+.sidebar {
+  order: 2;
 }
 
 .content-area.ppt-collapsed {
@@ -496,6 +913,9 @@ onUnmounted(() => {
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
+  /* 硬件加速 */
+  transform: translateZ(0);
+  will-change: width;
 }
 
 .lesson-panel {
@@ -553,11 +973,43 @@ onUnmounted(() => {
   height: 16px;
 }
 
+/* 状态变换按钮 */
+.state-toggle-button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.state-toggle-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.state-toggle-button.active {
+  background: #FF6B00;
+  color: white;
+}
+
+.state-icon {
+  width: 16px;
+  height: 16px;
+  transition: all 0.3s ease;
+}
+
 /* 面板内容 */
 .panel-content {
   flex: 1;
   padding: 20px;
   overflow-y: auto;
+  position: relative;
 }
 
 /* 教案内容 */
@@ -609,6 +1061,18 @@ onUnmounted(() => {
   transition: all 0.3s ease;
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  /* 硬件加速 */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .resizer:hover {
@@ -619,6 +1083,63 @@ onUnmounted(() => {
 .resizer.dragging {
   background: rgba(255, 138, 61, 0.6);
   box-shadow: 0 0 0 2px rgba(255, 138, 61, 0.8);
+}
+
+/* 滑块手柄 */
+.resizer-handle {
+  width: 4px;
+  height: 40px;
+  background: #FF8A3D;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+
+.resizer:hover .resizer-handle {
+  height: 60px;
+  background: #FF6B00;
+}
+
+.resizer.dragging .resizer-handle {
+  height: 80px;
+  background: #FF6B00;
+  box-shadow: 0 0 0 2px rgba(255, 107, 0, 0.3);
+}
+
+/* 滑块提示框 */
+.resizer-tooltip {
+  position: absolute;
+  top: -40px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
+  animation: fadeIn 0.2s ease;
+}
+
+.resizer-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* 悬浮提问框 */
@@ -637,6 +1158,28 @@ onUnmounted(() => {
   width: 80%;
   max-width: 600px;
   border: 1px solid #F0E0D0;
+  cursor: text;
+  z-index: 1100;
+  transition: all 0.3s ease;
+}
+
+/* PPT面板中的提问框 */
+.ppt-panel .question-box {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 40px);
+  max-width: 500px;
+}
+
+/* 确保PPT内容区域相对定位，使提问框能正确定位 */
+.ppt-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
 }
 
 .question-input {
@@ -667,6 +1210,41 @@ onUnmounted(() => {
 .send-button:hover {
   background: #FF6B00;
   transform: scale(1.05);
+}
+
+/* 预设问题区域 */
+.preset-questions {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  border: 1px solid #F0E0D0;
+  border-bottom: none;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+  z-index: 1200;
+}
+
+.preset-question-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  color: #333;
+  border-bottom: 1px solid #F0F0F0;
+}
+
+.preset-question-item:hover {
+  background: rgba(255, 138, 61, 0.1);
+  color: #FF8A3D;
+}
+
+.preset-question-item:last-child {
+  border-bottom: none;
 }
 
 /* 响应式设计 */

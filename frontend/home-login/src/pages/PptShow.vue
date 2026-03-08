@@ -52,7 +52,6 @@
     
     <!-- 主内容区 -->
     <div class="main-content">
-      <h2 class="page-title">我的课程</h2>
       
       <!-- 卡片网格 -->
       <div class="cards-grid">
@@ -62,7 +61,7 @@
             <div class="plus-button">
               +
             </div>
-            <p class="new-card-text">添加PPT</p>
+            <p class="new-card-text">添加PPT或图片</p>
           </div>
         </div>
         
@@ -556,14 +555,14 @@ document.addEventListener('click', (e) => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 25px 30px;
+  margin-top: 2rem;
   margin-bottom: 2rem;
 }
 
 /* 卡片基础样式 */
 .card {
-  transform: scale(0.8);
-  transform-origin: top center;
   margin: 0 auto;
+  position: relative;
 }
 
 /* 响应式网格布局 */
@@ -588,8 +587,6 @@ document.addEventListener('click', (e) => {
   transition: all 0.3s ease;
   position: relative;
   box-shadow: none;
-  transform: scale(0.8);
-  transform-origin: top center;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
@@ -641,10 +638,11 @@ document.addEventListener('click', (e) => {
   min-height: 220px;
   position: relative;
   border: 2px solid transparent;
+  transform-origin: center;
 }
 
 .ppt-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-4px) scale(1.05);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
   border-color: #FF8A3D;
   transition: all 0.3s ease;
@@ -721,11 +719,11 @@ document.addEventListener('click', (e) => {
   position: absolute;
   bottom: 30px;
   right: 30px;
-  width: 50px;
-  height: 50px;
+  width: 40px;
+  height: 40px;
   background: none;
   border: none;
-  font-size: 40px;
+  font-size: 32px;
   color: #CCCCCC;
   cursor: pointer;
   transition: all 0.2s ease;

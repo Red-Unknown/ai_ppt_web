@@ -1,33 +1,13 @@
 <template>
   <div class="login-card" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave">
     <div class="card-content">
-
-      
       <!-- 标题 -->
       <div class="login-header">
-        <h1 class="login-title" :class="{ 'teacher-theme': selectedRole === 'teacher', 'student-theme': selectedRole === 'student' }">注册账号</h1>
-        <p class="login-subtitle">请填写以下信息完成注册</p>
+        <h1 class="login-title">忘记密码</h1>
+        <p class="login-subtitle">请填写以下信息重置您的密码</p>
       </div>
       
-      <!-- 身份选择区 -->
-      <div class="role-selection">
-        <button 
-          class="role-button teacher-button" 
-          :class="{ active: selectedRole === 'teacher' }"
-          @click="selectRole('teacher')"
-        >
-          老师
-        </button>
-        <button 
-          class="role-button student-button" 
-          :class="{ active: selectedRole === 'student' }"
-          @click="selectRole('student')"
-        >
-          学生
-        </button>
-      </div>
-      
-      <!-- 注册表单 -->
+      <!-- 忘记密码表单 -->
       <form @submit.prevent="handleSubmit" class="login-form">
         <!-- 手机号输入框 -->
         <div class="form-group">
@@ -41,11 +21,13 @@
               v-model="form.phone"
               type="tel"
               class="form-input"
-              placeholder="请输入手机号"
+              placeholder="请输入注册手机号"
               @focus="handleInputFocus"
               @blur="handleInputBlur"
+              @input="validatePhone"
             />
           </div>
+          <p v-if="errors.phone" class="error-message">{{ errors.phone }}</p>
         </div>
         
         <!-- 验证码输入框 -->
@@ -64,20 +46,21 @@
               placeholder="验证码"
               @focus="handleInputFocus"
               @blur="handleInputBlur"
+              @input="validateCaptcha"
             />
             <button 
               type="button" 
-              class="captcha-button" 
-              :class="{ 'teacher-theme': selectedRole === 'teacher', 'student-theme': selectedRole === 'student' }"
+              class="captcha-button"
               @click="sendCaptcha"
-              :disabled="countdown > 0"
+              :disabled="countdown > 0 || !isPhoneValid"
             >
-              {{ countdown > 0 ? `${countdown}s` : '获取验证码' }}
+              {{ countdown > 0 ? `${countdown}s` : '发送验证码' }}
             </button>
           </div>
+          <p v-if="errors.captcha" class="error-message">{{ errors.captcha }}</p>
         </div>
         
-        <!-- 密码输入框 -->
+        <!-- 新密码输入框 -->
         <div class="form-group">
           <div class="input-wrapper password-wrapper">
             <div class="input-icon">
@@ -86,12 +69,13 @@
               </svg>
             </div>
             <input
-              v-model="form.password"
+              v-model="form.newPassword"
               :type="showPassword ? 'text' : 'password'"
               class="form-input"
-              placeholder="设置密码"
+              placeholder="设置新密码"
               @focus="handleInputFocus"
               @blur="handleInputBlur"
+              @input="validateNewPassword"
             />
             <button class="password-toggle" @click.prevent="togglePassword">
               <svg v-show="!showPassword" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -107,33 +91,59 @@
             </button>
           </div>
           <p class="password-rule">密码要求 8-16 位，至少包含数字、字母、字符两种元素</p>
+          <div class="password-strength" v-if="form.newPassword">
+            <div class="strength-bar" :class="passwordStrengthClass"></div>
+            <span class="strength-text">{{ passwordStrengthText }}</span>
+          </div>
+          <p v-if="errors.newPassword" class="error-message">{{ errors.newPassword }}</p>
         </div>
         
-        <!-- 注册按钮 -->
-        <button
-          type="submit"
-          class="login-button"
-          :class="{ 'teacher-theme': selectedRole === 'teacher', 'student-theme': selectedRole === 'student' }"
-          :disabled="!isFormValid"
-        >
-          <span v-if="!isSubmitting">注册</span>
-          <span v-else class="loading">
-            <svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle class="spinner-track" cx="12" cy="12" r="10" stroke-opacity="0.2"/>
-              <path class="spinner-path" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-            </svg>
-            注册中...
-          </span>
-        </button>
+        <!-- 确认密码输入框 -->
+        <div class="form-group">
+          <div class="input-wrapper password-wrapper">
+            <div class="input-icon">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+              </svg>
+            </div>
+            <input
+              v-model="form.confirmPassword"
+              :type="showPassword ? 'text' : 'password'"
+              class="form-input"
+              placeholder="确认新密码"
+              @focus="handleInputFocus"
+              @blur="handleInputBlur"
+              @input="validateConfirmPassword"
+            />
+          </div>
+          <p v-if="errors.confirmPassword" class="error-message">{{ errors.confirmPassword }}</p>
+        </div>
+        
+        <!-- 操作按钮区域 -->
+        <div class="button-group">
+          <button
+            type="button"
+            class="cancel-button"
+            @click="handleCancel"
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            class="login-button"
+            :disabled="!isFormValid"
+          >
+            <span v-if="!isSubmitting">重置密码</span>
+            <span v-else class="loading">
+              <svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle class="spinner-track" cx="12" cy="12" r="10" stroke-opacity="0.2"/>
+                <path class="spinner-path" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+              重置中...
+            </span>
+          </button>
+        </div>
       </form>
-      
-      <!-- 协议区 -->
-      <div class="agreement-section">
-        <span class="agreement-text">我已阅读并同意学习通</span>
-        <a href="#" class="agreement-link" :class="{ 'teacher-theme': selectedRole === 'teacher', 'student-theme': selectedRole === 'student' }">《隐私政策》</a>
-        <span class="agreement-text">和</span>
-        <a href="#" class="agreement-link" :class="{ 'teacher-theme': selectedRole === 'teacher', 'student-theme': selectedRole === 'student' }">《用户协议》</a>
-      </div>
     </div>
   </div>
 </template>
@@ -149,27 +159,80 @@ const router = useRouter()
 const emit = defineEmits(['close', 'success'])
 
 // 状态
-const selectedRole = ref('student')
 const showPassword = ref(false)
 const isSubmitting = ref(false)
 const countdown = ref(0)
+const isPhoneValid = ref(false)
 
 // 表单数据
 const form = ref({
   phone: '',
   captcha: '',
-  password: ''
+  newPassword: '',
+  confirmPassword: ''
+})
+
+// 错误信息
+const errors = ref({
+  phone: '',
+  captcha: '',
+  newPassword: '',
+  confirmPassword: ''
 })
 
 // 计算属性
 const isFormValid = computed(() => {
-  return selectedRole.value && form.value.phone && form.value.captcha && form.value.password
+  return (
+    isPhoneValid.value &&
+    form.value.captcha &&
+    form.value.newPassword &&
+    form.value.confirmPassword &&
+    form.value.newPassword === form.value.confirmPassword &&
+    !errors.value.phone &&
+    !errors.value.captcha &&
+    !errors.value.newPassword &&
+    !errors.value.confirmPassword
+  )
 })
 
-// 选择角色
-const selectRole = (role) => {
-  selectedRole.value = role
-}
+// 密码强度计算
+const passwordStrengthClass = computed(() => {
+  const password = form.value.newPassword
+  if (!password) return ''
+  
+  let strength = 0
+  if (password.length >= 8) strength++
+  if (/\d/.test(password)) strength++
+  if (/[a-zA-Z]/.test(password)) strength++
+  if (/[^a-zA-Z0-9]/.test(password)) strength++
+  
+  switch (strength) {
+    case 1: return 'weak'
+    case 2: return 'medium'
+    case 3: return 'strong'
+    case 4: return 'very-strong'
+    default: return ''
+  }
+})
+
+const passwordStrengthText = computed(() => {
+  const password = form.value.newPassword
+  if (!password) return ''
+  
+  let strength = 0
+  if (password.length >= 8) strength++
+  if (/\d/.test(password)) strength++
+  if (/[a-zA-Z]/.test(password)) strength++
+  if (/[^a-zA-Z0-9]/.test(password)) strength++
+  
+  switch (strength) {
+    case 1: return '弱'
+    case 2: return '中等'
+    case 3: return '强'
+    case 4: return '非常强'
+    default: return ''
+  }
+})
 
 // 切换密码显示
 const togglePassword = () => {
@@ -192,10 +255,89 @@ const handleInputBlur = (event) => {
   }
 }
 
+// 验证手机号
+const validatePhone = () => {
+  const phone = form.value.phone
+  if (!phone) {
+    errors.value.phone = '请输入手机号'
+    isPhoneValid.value = false
+    return
+  }
+  
+  const phoneRegex = /^1[3-9]\d{9}$/
+  if (!phoneRegex.test(phone)) {
+    errors.value.phone = '请输入正确的手机号'
+    isPhoneValid.value = false
+    return
+  }
+  
+  errors.value.phone = ''
+  isPhoneValid.value = true
+}
+
+// 验证验证码
+const validateCaptcha = () => {
+  const captcha = form.value.captcha
+  if (!captcha) {
+    errors.value.captcha = '请输入验证码'
+    return
+  }
+  
+  if (captcha.length !== 4) {
+    errors.value.captcha = '验证码为4位数字'
+    return
+  }
+  
+  errors.value.captcha = ''
+}
+
+// 验证新密码
+const validateNewPassword = () => {
+  const password = form.value.newPassword
+  if (!password) {
+    errors.value.newPassword = '请设置新密码'
+    return
+  }
+  
+  if (password.length < 8 || password.length > 16) {
+    errors.value.newPassword = '密码长度为8-16位'
+    return
+  }
+  
+  let strength = 0
+  if (/\d/.test(password)) strength++
+  if (/[a-zA-Z]/.test(password)) strength++
+  if (/[^a-zA-Z0-9]/.test(password)) strength++
+  
+  if (strength < 2) {
+    errors.value.newPassword = '密码至少包含两种字符类型'
+    return
+  }
+  
+  errors.value.newPassword = ''
+  validateConfirmPassword()
+}
+
+// 验证确认密码
+const validateConfirmPassword = () => {
+  const confirmPassword = form.value.confirmPassword
+  if (!confirmPassword) {
+    errors.value.confirmPassword = '请确认新密码'
+    return
+  }
+  
+  if (confirmPassword !== form.value.newPassword) {
+    errors.value.confirmPassword = '两次输入的密码不一致'
+    return
+  }
+  
+  errors.value.confirmPassword = ''
+}
+
 // 发送验证码
 const sendCaptcha = () => {
-  if (!form.value.phone) {
-    alert('请输入手机号')
+  if (!isPhoneValid.value) {
+    validatePhone()
     return
   }
   
@@ -215,36 +357,41 @@ const sendCaptcha = () => {
 const handleSubmit = async () => {
   if (isSubmitting.value) return
   
-  // 简单验证
+  // 验证表单
+  validatePhone()
+  validateCaptcha()
+  validateNewPassword()
+  validateConfirmPassword()
+  
   if (!isFormValid.value) {
-    alert('请填写所有字段')
     return
   }
   
   isSubmitting.value = true
   
   try {
-    // 模拟注册请求
+    // 模拟重置密码请求
     await new Promise(resolve => setTimeout(resolve, 1500))
-    console.log('注册成功', form.value)
+    console.log('密码重置成功', form.value)
     
-    // 保存登录状态
-    localStorage.setItem('token', 'mock-token') // 模拟token
-    localStorage.setItem('userRole', selectedRole.value)
+    alert('密码重置成功！')
     
-    alert('注册成功！')
-    
-    // 通知父组件注册成功
+    // 通知父组件重置成功
     emit('success')
     
-    // 跳转到PPT展示页面
-    router.push('/ppt-show')
+    // 关闭弹窗
+    emit('close')
   } catch (error) {
-    console.error('注册失败', error)
-    alert('注册失败，请重试')
+    console.error('密码重置失败', error)
+    alert('密码重置失败，请重试')
   } finally {
     isSubmitting.value = false
   }
+}
+
+// 取消操作
+const handleCancel = () => {
+  emit('close')
 }
 
 // 鼠标悬停特效
@@ -262,7 +409,7 @@ const handleMouseEnter = (e) => {
   
   // 创建圆形元素
   const circle = document.createElement('div')
-  circle.className = `hover-circle in ${selectedRole.value}-theme`
+  circle.className = 'hover-circle in'
   circle.style.left = x + 'px'
   circle.style.top = y + 'px'
   
@@ -286,7 +433,7 @@ const handleMouseLeave = (e) => {
   const y = e.clientY - rect.top
   
   // 应用离开动画
-  hoverCircle.className = `hover-circle out ${selectedRole.value}-theme`
+  hoverCircle.className = 'hover-circle out'
   hoverCircle.style.left = x + 'px'
   hoverCircle.style.top = y + 'px'
   
@@ -325,6 +472,13 @@ const handleMouseLeave = (e) => {
   box-shadow: 0 15px 50px rgba(0, 0, 0, 0.15);
 }
 
+/* 卡片内容 */
+.card-content {
+  padding: 2.5rem;
+  position: relative;
+  z-index: 1;
+}
+
 /* 登录头部 */
 .login-header {
   text-align: center;
@@ -335,21 +489,11 @@ const handleMouseLeave = (e) => {
 .login-title {
   font-size: 1.875rem;
   font-weight: 700;
-  color: #94a3b8;
+  color: #f5622b;
   margin-bottom: 0.5rem;
   line-height: 1.3;
   letter-spacing: -0.02em;
   transition: color 0.3s ease;
-}
-
-
-
-.login-title.teacher-theme {
-  color: #3283fd;
-}
-
-.login-title.student-theme {
-  color: #f5622b;
 }
 
 .login-subtitle {
@@ -357,47 +501,6 @@ const handleMouseLeave = (e) => {
   color: #64748b;
   line-height: 1.6;
   letter-spacing: 0.01em;
-}
-
-/* 身份选择区 */
-.role-selection {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.role-button {
-  flex: 1;
-  padding: 0.75rem;
-  border-radius: 12px;
-  border: 2px solid;
-  background: white;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.teacher-button {
-  color: #318de2;
-  border-color: #318de2;
-}
-
-.teacher-button.active {
-  background: #3283fd;
-  color: white;
-  border-color: #3283fd;
-}
-
-.student-button {
-  color: #f5622b;
-  border-color: #f5622b;
-}
-
-.student-button.active {
-  background: #f5622b;
-  color: white;
-  border-color: #f5622b;
 }
 
 /* 登录表单 */
@@ -509,6 +612,47 @@ const handleMouseLeave = (e) => {
   text-align: left;
 }
 
+/* 密码强度 */
+.password-strength {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.strength-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+
+.strength-bar.weak {
+  background: #ef4444;
+  width: 25%;
+}
+
+.strength-bar.medium {
+  background: #f59e0b;
+  width: 50%;
+}
+
+.strength-bar.strong {
+  background: #10b981;
+  width: 75%;
+}
+
+.strength-bar.very-strong {
+  background: #3b82f6;
+  width: 100%;
+}
+
+.strength-text {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
 /* 验证码包装器 */
 .captcha-wrapper {
   display: flex;
@@ -528,19 +672,15 @@ const handleMouseLeave = (e) => {
   border-left: 1px solid rgba(255, 255, 255, 0.3);
   font-size: 0.875rem;
   font-weight: 600;
-  color: #94a3b8;
+  color: #f5622b;
   cursor: pointer;
   transition: all 0.2s ease;
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
-.captcha-button.teacher-theme {
-  color: #3283fd;
-}
-
-.captcha-button.student-theme {
-  color: #f5622b;
+.captcha-button:hover:not(:disabled) {
+  background: rgba(245, 98, 43, 0.1);
 }
 
 .captcha-button:disabled {
@@ -548,11 +688,45 @@ const handleMouseLeave = (e) => {
   cursor: not-allowed;
 }
 
-/* 注册按钮 */
-.login-button {
-  width: 100%;
+/* 按钮组 */
+.button-group {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+/* 取消按钮 */
+.cancel-button {
+  flex: 1;
   padding: 1rem 1.5rem;
-  background: #94a3b8;
+  background: white;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.01em;
+}
+
+.cancel-button:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.cancel-button:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* 登录按钮 */
+.login-button {
+  flex: 2;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #f5622b 0%, #ff8a3d 100%);
   color: white;
   border: none;
   border-radius: 12px;
@@ -560,37 +734,19 @@ const handleMouseLeave = (e) => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 14px rgba(148, 163, 184, 0.35);
-  letter-spacing: 0.01em;
-  margin-top: 0.5rem;
-}
-
-.login-button.teacher-theme {
-  background: linear-gradient(135deg, #3283fd 0%, #318de2 100%);
-  box-shadow: 0 4px 14px rgba(50, 131, 253, 0.35);
-}
-
-.login-button.student-theme {
-  background: linear-gradient(135deg, #f5622b 0%, #ff8a3d 100%);
   box-shadow: 0 4px 14px rgba(245, 98, 43, 0.35);
+  letter-spacing: 0.01em;
 }
 
 .login-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(148, 163, 184, 0.45);
-}
-
-.login-button.teacher-theme:hover:not(:disabled) {
-  box-shadow: 0 6px 20px rgba(50, 131, 253, 0.45);
-}
-
-.login-button.student-theme:hover:not(:disabled) {
+  background: linear-gradient(135deg, #e65a27 0%, #f5622b 100%);
   box-shadow: 0 6px 20px rgba(245, 98, 43, 0.45);
+  transform: translateY(-1px);
 }
 
 .login-button:active:not(:disabled) {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(148, 163, 184, 0.35);
+  box-shadow: 0 2px 8px rgba(245, 98, 43, 0.35);
 }
 
 .login-button:disabled {
@@ -624,43 +780,12 @@ const handleMouseLeave = (e) => {
   }
 }
 
-/* 协议区 */
-.agreement-section {
-  text-align: center;
-  margin-top: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  flex-wrap: wrap;
-}
-
-.agreement-text {
+/* 错误信息 */
+.error-message {
   font-size: 0.75rem;
-  color: #64748b;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-}
-
-.agreement-link {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  font-weight: 600;
-  text-decoration: none;
-  transition: color 0.2s ease;
-  letter-spacing: 0.01em;
-}
-
-.agreement-link.teacher-theme {
-  color: #3283fd;
-}
-
-.agreement-link.student-theme {
-  color: #f5622b;
-}
-
-.agreement-link:hover {
-  text-decoration: underline;
+  color: #ef4444;
+  margin-top: 0.5rem;
+  text-align: left;
 }
 
 /* 响应式设计 */
@@ -677,12 +802,18 @@ const handleMouseLeave = (e) => {
     padding: 0.875rem 1rem 0.875rem 3rem;
   }
   
-  .login-button {
+  .login-button,
+  .cancel-button {
     padding: 0.875rem 1.5rem;
   }
   
-  .role-selection {
+  .button-group {
     flex-direction: column;
+  }
+  
+  .cancel-button,
+  .login-button {
+    width: 100%;
   }
 }
 
@@ -694,17 +825,13 @@ const handleMouseLeave = (e) => {
   .login-title {
     font-size: 1.375rem;
   }
-  
-  .agreement-section {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
 }
 
 /* 鼠标悬停特效 */
 :global(.hover-circle) {
   position: absolute;
   border-radius: 50%;
+  background: rgba(255, 215, 0, 0.3);
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: -1;
@@ -721,16 +848,6 @@ const handleMouseLeave = (e) => {
   width: 1200px;
   height: 1200px;
   animation: hoverOut 0.5s ease-in forwards;
-}
-
-/* 老师角色颜色 */
-:global(.hover-circle.teacher-theme) {
-  background: rgba(202, 127, 255, 0.3);
-}
-
-/* 学生角色颜色 */
-:global(.hover-circle.student-theme) {
-  background: rgba(255, 215, 0, 0.3);
 }
 
 @keyframes hoverIn {
@@ -755,20 +872,14 @@ const handleMouseLeave = (e) => {
   }
 }
 
-/* 卡片内容 */
-.card-content {
-  padding: 2.5rem;
-  position: relative;
-  z-index: 1;
-}
-
 /* 减少动画偏好 */
 @media (prefers-reduced-motion: reduce) {
   .login-card,
   .input-wrapper,
   .login-button,
-  .close-button,
+  .cancel-button,
   .password-toggle,
+  .captcha-button,
   :global(.hover-circle) {
     transition: none;
     animation: none;

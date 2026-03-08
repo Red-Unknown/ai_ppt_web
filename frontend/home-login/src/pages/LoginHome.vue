@@ -56,7 +56,7 @@
     <!-- 登录弹窗 -->
     <div v-if="showLoginPopup" class="popup-overlay" @click="closeLoginPopup">
       <div class="popup-content" @click.stop>
-        <LoginPopup @close="closeLoginPopup" @success="handleLoginSuccess" />
+        <LoginPopup @close="closeLoginPopup" @success="handleLoginSuccess" @register="handleRegisterFromLogin" @forgot="handleForgotFromLogin" />
       </div>
     </div>
     
@@ -66,6 +66,13 @@
         <RegisterPopup @close="closeRegisterPopup" @success="handleRegisterSuccess" />
       </div>
     </div>
+    
+    <!-- 忘记密码弹窗 -->
+    <div v-if="showForgetPopup" class="popup-overlay" @click="closeForgetPopup">
+      <div class="popup-content" @click.stop>
+        <ForgetPopup @close="closeForgetPopup" @success="handleForgetSuccess" />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -73,10 +80,12 @@
 import { ref } from 'vue'
 import LoginPopup from '../components/LoginPopup.vue'
 import RegisterPopup from '../components/RegisterPopup.vue'
+import ForgetPopup from '../components/ForgetPopup.vue'
 
 // 状态
 const showLoginPopup = ref(false)
 const showRegisterPopup = ref(false)
+const showForgetPopup = ref(false)
 
 // 返回
 const handleBack = () => {
@@ -101,6 +110,30 @@ const handleLoginSuccess = () => {
 // 处理注册成功
 const handleRegisterSuccess = () => {
   showRegisterPopup.value = false
+}
+
+// 从登录弹窗打开注册弹窗
+const handleRegisterFromLogin = () => {
+  showLoginPopup.value = false
+  showRegisterPopup.value = true
+}
+
+// 关闭忘记密码弹窗
+const closeForgetPopup = () => {
+  showForgetPopup.value = false
+}
+
+// 处理忘记密码成功
+const handleForgetSuccess = () => {
+  showForgetPopup.value = false
+  // 可以在这里添加其他逻辑，比如显示登录弹窗
+  showLoginPopup.value = true
+}
+
+// 从登录弹窗打开忘记密码弹窗
+const handleForgotFromLogin = () => {
+  showLoginPopup.value = false
+  showForgetPopup.value = true
 }
 </script>
 
