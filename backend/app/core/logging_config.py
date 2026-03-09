@@ -10,7 +10,7 @@ def setup_logging():
     符合行业标准：文件轮转、分级日志、结构化格式
     """
     # 创建日志目录
-    log_dir = Path("f:/college/sophomore/服务外包/log")
+    log_dir = settings.LOG_DIR
     log_dir.mkdir(exist_ok=True)
     
     # 配置根日志器

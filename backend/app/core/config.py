@@ -1,5 +1,10 @@
 from pydantic_settings import BaseSettings
 from typing import List
+from pathlib import Path
+
+# Calculate Project Root
+# backend/app/core/config.py -> backend/app/core -> backend/app -> backend -> project_root
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "FWWB A12 AI Interactive Course System"
@@ -7,12 +12,16 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     ALLOWED_HOSTS: List[str] = ["*"]
+
+    # Paths
+    BASE_DIR: Path = PROJECT_ROOT
     
     # Logging Configuration
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
     LOG_FILE_MAX_SIZE: int = 10  # MB
     LOG_BACKUP_COUNT: int = 5
+    LOG_DIR: Path = PROJECT_ROOT / "log"
     
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/fwwb_a12"
@@ -27,7 +36,7 @@ class Settings(BaseSettings):
     DEEPSEEK_MAX_TOKENS: int = 10000
     DEEPSEEK_TEMPERATURE: float = 0.7
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
-    DEEPSEEK_PROMPTS_PATH: str = "backend/app/core/prompts/qa_prompts.json"
+    DEEPSEEK_PROMPTS_PATH: Path = PROJECT_ROOT / "backend/app/core/prompts/qa_prompts.json"
     OPENAI_API_KEY: str = ""
 
     # Web Search Configuration
