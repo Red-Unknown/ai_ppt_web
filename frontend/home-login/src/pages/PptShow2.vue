@@ -1,7 +1,7 @@
 <template>
   <div class="ppt-show-page">
     <!-- 背景渐变 -->
-    <div class="bg-gradient"></div>
+    <div class="bg-gradient" @click="handleBackgroundClick" ref="bgGradient"></div>
     
     <!-- 动态气泡 -->
     <div class="bubbles">
@@ -20,7 +20,7 @@
       <div class="navbar-logo">AI智教</div>
       <div class="navbar-user" @click="toggleUserMenu">
         <div class="user-avatar"></div>
-        <span class="user-greeting">你好，同学</span>
+        <span class="user-greeting">你好，老师</span>
         <!-- 下拉伸缩栏 -->
         <div class="user-menu" :class="{ 'visible': showUserMenu }">
           <div class="menu-item" @click.stop="navigateTo('profile')">
@@ -115,6 +115,16 @@
                 </div>
                 <div class="sub-accordion-content" :class="{ 'expanded': expandedSubAccordion.science === `chapter${index + 1}` }">
                   <div class="card-scroll-container">
+                    <!-- 添加PPT卡片 -->
+                    <div class="card new-card" @click="handleNewPPT">
+                      <div class="new-card-content">
+                        <div class="plus-button">
+                          +
+                        </div>
+                        <p class="new-card-text">添加PPT或图片</p>
+                      </div>
+                    </div>
+                    
                     <!-- 章节PPT卡片 -->
                     <div 
                       v-for="(ppt, pptIndex) in filteredPptList('science', `chapter${index + 1}`)" 
@@ -214,6 +224,16 @@
                 </div>
                 <div class="sub-accordion-content" :class="{ 'expanded': expandedSubAccordion.arts === `chapter${index + 1}` }">
                   <div class="card-scroll-container">
+                    <!-- 添加PPT卡片 -->
+                    <div class="card new-card" @click="handleNewPPT">
+                      <div class="new-card-content">
+                        <div class="plus-button">
+                          +
+                        </div>
+                        <p class="new-card-text">添加PPT或图片</p>
+                      </div>
+                    </div>
+                    
                     <!-- 章节PPT卡片 -->
                     <div 
                       v-for="(ppt, pptIndex) in filteredPptList('arts', `chapter${index + 1}`)" 
@@ -313,6 +333,16 @@
                 </div>
                 <div class="sub-accordion-content" :class="{ 'expanded': expandedSubAccordion.engineering === `chapter${index + 1}` }">
                   <div class="card-scroll-container">
+                    <!-- 添加PPT卡片 -->
+                    <div class="card new-card" @click="handleNewPPT">
+                      <div class="new-card-content">
+                        <div class="plus-button">
+                          +
+                        </div>
+                        <p class="new-card-text">添加PPT或图片</p>
+                      </div>
+                    </div>
+                    
                     <!-- 章节PPT卡片 -->
                     <div 
                       v-for="(ppt, pptIndex) in filteredPptList('engineering', `chapter${index + 1}`)" 
@@ -365,6 +395,13 @@
       </div>
     </div>
     
+    <!-- 添加PPT弹窗 -->
+    <AddPPTPopup 
+      v-if="showAddPPTPopup" 
+      @close="showAddPPTPopup = false"
+      @success="handleAddPPTSuccess"
+    />
+    
     <!-- 添加章节弹窗 -->
     <AddChaptPopup 
       v-if="showAddChaptPopup" 
@@ -376,17 +413,22 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import AddPPTPopup from '../components/AddPPTPopup.vue'
 import AddChaptPopup from '../components/AddChaptPopup.vue'
 
 // 状态
+const showAddPPTPopup = ref(false)
+const showAddChaptPopup = ref(false)
 const hoveredPptIndex = ref(-1)
 const showUserMenu = ref(false)
-const showAddChaptPopup = ref(false)
 const isDeleteMode = ref(false)
 let hoverTimer = null
 
 // 当前操作的课程分类
 const currentCategory = ref('')
+
+// 背景元素引用
+const bgGradient = ref(null)
 
 // 折叠面板状态
 const expandedAccordion = ref('science') // 默认展开理科面板
@@ -402,111 +444,41 @@ const chapterList = ref({
 // 搜索状态
 const searchQuery = ref('')
 
-// 模拟PPT数据
-const pptList = ref([
-  {
-    id: 1,
-    title: '数学基础课程',
-    subtitle: '高等数学知识点总结',
-    description: '本PPT包含了高等数学的核心知识点，包括微积分、线性代数等内容，适合学生复习使用。',
-    cover: 'https://via.placeholder.com/600x338/FFD700/333?text=数学基础课程',
-    lastEdited: '2026-03-04 14:30',
-    isFavorite: false,
-    category: 'science',
-    chapter: 'chapter1'
-  },
-  {
-    id: 2,
-    title: '英语语法精讲',
-    subtitle: '大学英语语法重点解析',
-    description: '详细讲解大学英语语法知识点，包含时态、语态、从句等内容，配有大量例句。',
-    cover: 'https://via.placeholder.com/600x338/4682B4/FFF?text=英语语法精讲',
-    lastEdited: '2026-03-03 09:15',
-    isFavorite: false,
-    category: 'engineering',
-    chapter: 'chapter1'
-  },
-  {
-    id: 3,
-    title: '物理实验指南',
-    subtitle: '大学物理实验操作步骤',
-    description: '介绍大学物理常见实验的操作步骤和注意事项，帮助学生掌握实验技能。',
-    cover: 'https://via.placeholder.com/600x338/32CD32/333?text=物理实验指南',
-    lastEdited: '2026-03-02 16:45',
-    isFavorite: false,
-    category: 'arts',
-    chapter: 'chapter1'
-  },
-  {
-    id: 4,
-    title: '数学进阶课程',
-    subtitle: '高等数学深入讲解',
-    description: '深入讲解高等数学的进阶内容，包括多元微积分、常微分方程等。',
-    cover: 'https://via.placeholder.com/600x338/FFA500/333?text=数学进阶课程',
-    lastEdited: '2026-03-01 11:20',
-    isFavorite: false,
-    category: 'science',
-    chapter: 'chapter2'
-  },
-  {
-    id: 5,
-    title: '英语听力训练',
-    subtitle: '大学英语听力技巧',
-    description: '介绍大学英语听力的训练方法和技巧，帮助学生提高听力水平。',
-    cover: 'https://via.placeholder.com/600x338/1E90FF/FFF?text=英语听力训练',
-    lastEdited: '2026-02-28 10:00',
-    isFavorite: false,
-    category: 'engineering',
-    chapter: 'chapter2'
-  },
-  {
-    id: 6,
-    title: '物理理论基础',
-    subtitle: '大学物理理论讲解',
-    description: '详细讲解大学物理的理论基础，包括牛顿力学、电磁学等内容。',
-    cover: 'https://via.placeholder.com/600x338/32CD32/333?text=物理理论基础',
-    lastEdited: '2026-02-27 15:30',
-    isFavorite: false,
-    category: 'arts',
-    chapter: 'chapter2'
-  },
-  {
-    id: 7,
-    title: '数学应用实例',
-    subtitle: '高等数学在实际中的应用',
-    description: '介绍高等数学在工程、经济等领域的实际应用案例。',
-    cover: 'https://via.placeholder.com/600x338/FF6347/333?text=数学应用实例',
-    lastEdited: '2026-02-26 14:20',
-    isFavorite: false,
-    category: 'science',
-    chapter: 'chapter3'
-  },
-  {
-    id: 8,
-    title: '英语口语练习',
-    subtitle: '大学英语口语技巧',
-    description: '介绍大学英语口语的练习方法和技巧，帮助学生提高口语水平。',
-    cover: 'https://via.placeholder.com/600x338/9370DB/FFF?text=英语口语练习',
-    lastEdited: '2026-02-25 09:10',
-    isFavorite: false,
-    category: 'engineering',
-    chapter: 'chapter3'
-  },
-  {
-    id: 9,
-    title: '物理实验设计',
-    subtitle: '大学物理实验设计方法',
-    description: '介绍大学物理实验的设计思路和方法，帮助学生设计自己的实验。',
-    cover: 'https://via.placeholder.com/600x338/20B2AA/333?text=物理实验设计',
-    lastEdited: '2026-02-24 16:30',
-    isFavorite: false,
-    category: 'arts',
-    chapter: 'chapter3'
+// 处理背景点击事件
+const handleBackgroundClick = () => {
+  if (bgGradient.value) {
+    // 添加点击类
+    bgGradient.value.classList.add('clicked')
+    // 1秒后移除点击类
+    setTimeout(() => {
+      if (bgGradient.value) {
+        bgGradient.value.classList.remove('clicked')
+      }
+    }, 1000)
   }
-])
+}
+
+// 处理滚动事件
+const handleScroll = () => {
+  if (bgGradient.value) {
+    // 根据滚动位置改变背景渐变
+    const scrollTop = window.scrollY
+    const scrollHeight = document.documentElement.scrollHeight - window.innerHeight
+    const scrollProgress = scrollTop / scrollHeight
+    
+    // 根据滚动进度改变背景色
+    if (scrollProgress > 0.5) {
+      bgGradient.value.style.background = 'linear-gradient(135deg, #3285FA, #FFD93D, #3285FA)'
+    } else {
+      bgGradient.value.style.background = 'linear-gradient(135deg, #FFD93D, #3285FA, #FFD93D)'
+    }
+  }
+}
 
 // 生命周期钩子
 onMounted(() => {
+  // 添加滚动事件监听
+  window.addEventListener('scroll', handleScroll)
   // 从本地存储加载折叠面板状态
   const savedAccordion = localStorage.getItem('expandedAccordion')
   if (savedAccordion) {
@@ -518,9 +490,11 @@ onMounted(() => {
   if (savedChapters) {
     chapterList.value = JSON.parse(savedChapters)
   }
-  
-  // 初始化收藏状态
-  initFavorites()
+})
+
+onUnmounted(() => {
+  // 移除滚动事件监听
+  window.removeEventListener('scroll', handleScroll)
 })
 
 // 切换折叠面板
@@ -612,6 +586,109 @@ const handleSearch = () => {
   // 这里可以添加搜索逻辑
 }
 
+// 模拟PPT数据
+const pptList = ref([
+  {
+    id: 1,
+    title: '数学基础课程',
+    subtitle: '高等数学知识点总结',
+    description: '本PPT包含了高等数学的核心知识点，包括微积分、线性代数等内容，适合学生复习使用。',
+    cover: 'https://via.placeholder.com/600x338/3285FA/333?text=数学基础课程',
+    lastEdited: '2026-03-04 14:30',
+    isFavorite: false,
+    category: 'science',
+    chapter: 'chapter1'
+  },
+  {
+    id: 2,
+    title: '英语语法精讲',
+    subtitle: '大学英语语法重点解析',
+    description: '详细讲解大学英语语法知识点，包含时态、语态、从句等内容，配有大量例句。',
+    cover: 'https://via.placeholder.com/600x338/4682B4/FFF?text=英语语法精讲',
+    lastEdited: '2026-03-03 09:15',
+    isFavorite: false,
+    category: 'engineering',
+    chapter: 'chapter1'
+  },
+  {
+    id: 3,
+    title: '物理实验指南',
+    subtitle: '大学物理实验操作步骤',
+    description: '介绍大学物理常见实验的操作步骤和注意事项，帮助学生掌握实验技能。',
+    cover: 'https://via.placeholder.com/600x338/32CD32/333?text=物理实验指南',
+    lastEdited: '2026-03-02 16:45',
+    isFavorite: false,
+    category: 'arts',
+    chapter: 'chapter1'
+  },
+  {
+    id: 4,
+    title: '数学进阶课程',
+    subtitle: '高等数学深入讲解',
+    description: '深入讲解高等数学的进阶内容，包括多元微积分、常微分方程等。',
+    cover: 'https://via.placeholder.com/600x338/1E90FF/333?text=数学进阶课程',
+    lastEdited: '2026-03-01 11:20',
+    isFavorite: false,
+    category: 'science',
+    chapter: 'chapter2'
+  },
+  {
+    id: 5,
+    title: '英语听力训练',
+    subtitle: '大学英语听力技巧',
+    description: '介绍大学英语听力的训练方法和技巧，帮助学生提高听力水平。',
+    cover: 'https://via.placeholder.com/600x338/6495ED/FFF?text=英语听力训练',
+    lastEdited: '2026-02-28 10:00',
+    isFavorite: false,
+    category: 'engineering',
+    chapter: 'chapter2'
+  },
+  {
+    id: 6,
+    title: '物理理论基础',
+    subtitle: '大学物理理论讲解',
+    description: '详细讲解大学物理的理论基础，包括牛顿力学、电磁学等内容。',
+    cover: 'https://via.placeholder.com/600x338/4682B4/333?text=物理理论基础',
+    lastEdited: '2026-02-27 15:30',
+    isFavorite: false,
+    category: 'arts',
+    chapter: 'chapter2'
+  },
+  {
+    id: 7,
+    title: '数学应用实例',
+    subtitle: '高等数学在实际中的应用',
+    description: '介绍高等数学在工程、经济等领域的实际应用案例。',
+    cover: 'https://via.placeholder.com/600x338/1E90FF/333?text=数学应用实例',
+    lastEdited: '2026-02-26 14:20',
+    isFavorite: false,
+    category: 'science',
+    chapter: 'chapter3'
+  },
+  {
+    id: 8,
+    title: '英语口语练习',
+    subtitle: '大学英语口语技巧',
+    description: '介绍大学英语口语的练习方法和技巧，帮助学生提高口语水平。',
+    cover: 'https://via.placeholder.com/600x338/6495ED/FFF?text=英语口语练习',
+    lastEdited: '2026-02-25 09:10',
+    isFavorite: false,
+    category: 'engineering',
+    chapter: 'chapter3'
+  },
+  {
+    id: 9,
+    title: '物理实验设计',
+    subtitle: '大学物理实验设计方法',
+    description: '介绍大学物理实验的设计思路和方法，帮助学生设计自己的实验。',
+    cover: 'https://via.placeholder.com/600x338/4682B4/333?text=物理实验设计',
+    lastEdited: '2026-02-24 16:30',
+    isFavorite: false,
+    category: 'arts',
+    chapter: 'chapter3'
+  }
+])
+
 // 根据分类、章节和搜索过滤PPT列表
 const filteredPptList = (category, chapter = null) => {
   let filtered = pptList.value.filter(ppt => ppt.category === category)
@@ -631,6 +708,12 @@ const filteredPptList = (category, chapter = null) => {
 // 返回
 const handleBack = () => {
   window.history.back()
+}
+
+// 处理添加PPT成功
+const handleAddPPTSuccess = () => {
+  console.log('添加PPT成功')
+  // 这里可以添加成功后的处理逻辑
 }
 
 // 处理PPT悬停
@@ -657,8 +740,13 @@ const handlePptHover = (index, isHovering) => {
 // 处理PPT点击
 const handlePptClick = (id) => {
   console.log('点击PPT:', id)
-  // 跳转到PptTeach页面
-  window.location.href = '/ppt-teach'
+  // 跳转到PptTeach2页面
+  window.location.href = '/ppt-teach2'
+}
+
+// 处理添加PPT
+const handleNewPPT = () => {
+  showAddPPTPopup.value = true
 }
 
 // 切换收藏状态
@@ -721,6 +809,9 @@ const initFavorites = () => {
   sortPptList()
 }
 
+// 初始化
+initFavorites()
+
 // 切换用户菜单显示/隐藏
 const toggleUserMenu = () => {
   showUserMenu.value = !showUserMenu.value
@@ -767,10 +858,22 @@ document.addEventListener('click', (e) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, #ff6b6b, #ffd93d, #ff6b6b);
+  background: linear-gradient(135deg, #FFD93D, #3285FA, #FFD93D);
   background-size: 400% 400%;
   animation: gradientFlow 15s ease infinite;
   z-index: 1;
+  transition: background 2s ease;
+}
+
+/* 悬停时的渐变效果 */
+.bg-gradient:hover {
+  background: linear-gradient(135deg, #FF6B6B, #3285FA, #FF6B6B);
+}
+
+/* 点击时的渐变效果 */
+.bg-gradient.clicked {
+  background: linear-gradient(135deg, #FF8A3D, #3285FA, #FF8A3D);
+  animation: pulse 1s ease-in-out;
 }
 
 /* 背景流动动画 */
@@ -783,6 +886,19 @@ document.addEventListener('click', (e) => {
   }
   100% {
     background-position: 0% 50%;
+  }
+}
+
+/* 点击脉冲动画 */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 
@@ -965,8 +1081,8 @@ document.addEventListener('click', (e) => {
 }
 
 .menu-item:hover {
-  background: rgba(255, 138, 61, 0.1);
-  color: #FF8A3D;
+  background: rgba(50, 133, 250, 0.1);
+  color: #3285FA;
 }
 
 .menu-icon {
@@ -992,7 +1108,7 @@ document.addEventListener('click', (e) => {
 
 /* 标题栏 */
 .subject-header {
-  background: #FF8A3D;
+  background: #3285FA;
   border-radius: 8px;
   padding: 16px 24px;
   margin-bottom: 24px;
@@ -1054,12 +1170,12 @@ document.addEventListener('click', (e) => {
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   backdrop-filter: blur(12px);
-  border: 1px solid #F0E0D0;
+  border: 1px solid #E0E8FF;
 }
 
 /* 折叠面板头部 */
 .accordion-header {
-  background: #FF8A3D;
+  background: #3285FA;
   padding: 16px 24px;
   display: flex;
   justify-content: space-between;
@@ -1191,7 +1307,7 @@ document.addEventListener('click', (e) => {
 }
 
 .accordion-header:hover {
-  background: #FF6B00;
+  background: #2563EB;
 }
 
 .accordion-title {
@@ -1238,12 +1354,12 @@ document.addEventListener('click', (e) => {
   border-radius: 6px;
   overflow: hidden;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  border: 1px solid #F0E0D0;
+  border: 1px solid #E0E8FF;
 }
 
 /* 子折叠面板头部 */
 .sub-accordion-header {
-  background: #FFA500;
+  background: #3285FA;
   padding: 12px 16px;
   display: flex;
   justify-content: space-between;
@@ -1253,7 +1369,7 @@ document.addEventListener('click', (e) => {
 }
 
 .sub-accordion-header:hover {
-  background: #FF8C00;
+  background: #2563EB;
 }
 
 .sub-accordion-title {
@@ -1294,7 +1410,7 @@ document.addEventListener('click', (e) => {
   overflow-x: auto;
   scroll-behavior: smooth;
   scrollbar-width: thin;
-  scrollbar-color: #FF8A3D #F0E0D0;
+  scrollbar-color: #3285FA #E0E8FF;
 }
 
 .card-scroll-container::-webkit-scrollbar {
@@ -1302,24 +1418,24 @@ document.addEventListener('click', (e) => {
 }
 
 .card-scroll-container::-webkit-scrollbar-track {
-  background: #F0E0D0;
+  background: #E0E8FF;
   border-radius: 3px;
 }
 
 .card-scroll-container::-webkit-scrollbar-thumb {
-  background: #FF8A3D;
+  background: #3285FA;
   border-radius: 3px;
 }
 
 .card-scroll-container::-webkit-scrollbar-thumb:hover {
-  background: #FF6B00;
+  background: #2563EB;
 }
 
 /* 卡片基础样式 */
 .card {
-  background: #FFFBF5;
+  background: #F5FBFF;
   border-radius: 8px;
-  border: 1px solid #F0E0D0;
+  border: 1px solid #E0E8FF;
   overflow: hidden;
   transition: all 0.3s ease;
   position: relative;
@@ -1327,6 +1443,48 @@ document.addEventListener('click', (e) => {
   width: 280px;
   flex-shrink: 0;
   box-sizing: border-box;
+}
+
+/* 新建卡片 */
+.new-card {
+  background: #E7F3FF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  cursor: pointer;
+}
+
+.new-card-content {
+  text-align: center;
+  padding: 2rem;
+}
+
+.plus-button {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #3285FA;
+  color: white;
+  font-size: 2rem;
+  font-weight: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+  transition: all 0.2s ease;
+}
+
+.plus-button:hover {
+  transform: scale(1.1);
+  background: #2563EB;
+}
+
+.new-card-text {
+  color: #333;
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0;
 }
 
 /* PPT卡片 */
@@ -1342,7 +1500,7 @@ document.addEventListener('click', (e) => {
 .ppt-card:hover {
   transform: translateY(-4px) scale(1.02);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-  border-color: #FF8A3D;
+  border-color: #3285FA;
   transition: all 0.3s ease;
 }
 
@@ -1354,7 +1512,7 @@ document.addEventListener('click', (e) => {
 /* 卡片标题栏 */
 .card-header {
   height: auto;
-  background: #FF8A3D;
+  background: #3285FA;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1442,7 +1600,7 @@ document.addEventListener('click', (e) => {
 }
 
 .star-button.active {
-  color: #FF8A3D;
+  color: #3285FA;
 }
 
 /* 卡片描述 */
@@ -1451,7 +1609,7 @@ document.addEventListener('click', (e) => {
   top: -100%;
   left: 0;
   right: 0;
-  background: linear-gradient(to bottom, rgba(255, 102, 0, 1), rgba(255, 165, 0, 0));
+  background: linear-gradient(to bottom, rgba(50, 133, 250, 1), rgba(50, 133, 250, 0));
   padding: 16px;
   height: 66.67%; /* 卡片总高度的2/3 */
   overflow: hidden;
@@ -1512,6 +1670,16 @@ document.addEventListener('click', (e) => {
 @media (max-width: 480px) {
   .card {
     width: 200px;
+  }
+  
+  .new-card-content {
+    padding: 1.5rem;
+  }
+  
+  .plus-button {
+    width: 50px;
+    height: 50px;
+    font-size: 1.5rem;
   }
   
   .card-title {

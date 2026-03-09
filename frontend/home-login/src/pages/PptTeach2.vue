@@ -84,7 +84,7 @@
           </div>
           <div class="panel-content">
             <div class="ppt-content">
-              <img src="https://via.placeholder.com/800x450/FFD700/333?text=三角形面积计算" alt="PPT内容" class="ppt-image">
+              <img src="https://via.placeholder.com/800x450/3283FD/333?text=三角形面积计算" alt="PPT内容" class="ppt-image">
             </div>
             
             <!-- 悬浮提问框 -->
@@ -670,7 +670,7 @@ onUnmounted(() => {
   overflow: hidden;
   padding: 0;
   box-sizing: border-box;
-  background: #FFFBF5;
+  background: #F5FBFF;
 }
 
 /* 背景渐变 */
@@ -680,7 +680,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, #ff6b6b, #ffd93d, #ff6b6b);
+  background: linear-gradient(135deg, #3283FD, #50C878, #3283FD);
   background-size: 400% 400%;
   animation: gradientFlow 15s ease infinite;
   z-index: 1;
@@ -709,7 +709,7 @@ onUnmounted(() => {
   height: 64px;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid #F0E0D0;
+  border-bottom: 1px solid #E0F0FF;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -747,6 +747,7 @@ onUnmounted(() => {
   font-weight: 700;
   color: #333;
 }
+
 
 
 
@@ -796,7 +797,7 @@ onUnmounted(() => {
   width: 60px;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
-  border-left: 1px solid #F0E0D0;
+  border-left: 1px solid #E0F0FF;
   transition: width 0.3s ease;
   position: relative;
   z-index: 10;
@@ -853,8 +854,8 @@ onUnmounted(() => {
 }
 
 .sidebar-button:hover {
-  background: rgba(255, 138, 61, 0.1);
-  color: #FF8A3D;
+  background: rgba(50, 131, 253, 0.1);
+  color: #3283FD;
 }
 
 .sidebar-button:active {
@@ -908,7 +909,7 @@ onUnmounted(() => {
   border-radius: 8px;
   margin: 16px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  border: 1px solid #F0E0D0;
+  border: 1px solid #E0F0FF;
   overflow: hidden;
   transition: all 0.3s ease;
   display: flex;
@@ -935,7 +936,7 @@ onUnmounted(() => {
 
 /* 面板头部 */
 .panel-header {
-  background: #FF8A3D;
+  background: #3283FD;
   padding: 12px 16px;
   display: flex;
   justify-content: space-between;
@@ -994,7 +995,7 @@ onUnmounted(() => {
 }
 
 .state-toggle-button.active {
-  background: #FF6B00;
+  background: #0066FF;
   color: white;
 }
 
@@ -1019,7 +1020,7 @@ onUnmounted(() => {
 }
 
 .lesson-content h3 {
-  color: #FF8A3D;
+  color: #3283FD;
   margin-top: 24px;
   margin-bottom: 12px;
   font-size: 1.1rem;
@@ -1030,7 +1031,7 @@ onUnmounted(() => {
 }
 
 .highlight {
-  color: #FF8A3D;
+  color: #3283FD;
   font-weight: bold;
 }
 
@@ -1056,7 +1057,7 @@ onUnmounted(() => {
 /* 滑块 */
 .resizer {
   width: 8px;
-  background: rgba(255, 138, 61, 0.2);
+  background: rgba(50, 131, 253, 0.2);
   cursor: col-resize;
   transition: all 0.3s ease;
   position: relative;
@@ -1076,33 +1077,33 @@ onUnmounted(() => {
 }
 
 .resizer:hover {
-  background: rgba(255, 138, 61, 0.4);
-  box-shadow: 0 0 0 2px rgba(255, 138, 61, 0.6);
+  background: rgba(50, 131, 253, 0.4);
+  box-shadow: 0 0 0 2px rgba(50, 131, 253, 0.6);
 }
 
 .resizer.dragging {
-  background: rgba(255, 138, 61, 0.6);
-  box-shadow: 0 0 0 2px rgba(255, 138, 61, 0.8);
+  background: rgba(50, 131, 253, 0.6);
+  box-shadow: 0 0 0 2px rgba(50, 131, 253, 0.8);
 }
 
 /* 滑块手柄 */
 .resizer-handle {
   width: 4px;
   height: 40px;
-  background: #FF8A3D;
+  background: #3283FD;
   border-radius: 2px;
   transition: all 0.3s ease;
 }
 
 .resizer:hover .resizer-handle {
   height: 60px;
-  background: #FF6B00;
+  background: #0066FF;
 }
 
 .resizer.dragging .resizer-handle {
   height: 80px;
-  background: #FF6B00;
-  box-shadow: 0 0 0 2px rgba(255, 107, 0, 0.3);
+  background: #0066FF;
+  box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.3);
 }
 
 /* 滑块提示框 */
@@ -1157,7 +1158,7 @@ onUnmounted(() => {
   gap: 12px;
   width: 80%;
   max-width: 600px;
-  border: 1px solid #F0E0D0;
+  border: 1px solid #E0F0FF;
   cursor: text;
   z-index: 1100;
   transition: all 0.3s ease;
@@ -1198,7 +1199,7 @@ onUnmounted(() => {
 .send-button {
   padding: 8px 16px;
   border: none;
-  background: #FF8A3D;
+  background: #3283FD;
   color: white;
   border-radius: 20px;
   font-size: 0.875rem;
@@ -1208,7 +1209,7 @@ onUnmounted(() => {
 }
 
 .send-button:hover {
-  background: #FF6B00;
+  background: #0066FF;
   transform: scale(1.05);
 }
 
@@ -1221,7 +1222,7 @@ onUnmounted(() => {
   background: white;
   border-radius: 8px 8px 0 0;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-  border: 1px solid #F0E0D0;
+  border: 1px solid #E0F0FF;
   border-bottom: none;
   max-height: 200px;
   overflow-y: auto;
@@ -1239,8 +1240,8 @@ onUnmounted(() => {
 }
 
 .preset-question-item:hover {
-  background: rgba(255, 138, 61, 0.1);
-  color: #FF8A3D;
+  background: rgba(50, 131, 253, 0.1);
+  color: #3283FD;
 }
 
 .preset-question-item:last-child {
@@ -1265,7 +1266,7 @@ onUnmounted(() => {
     height: 60px;
     flex-direction: row;
     border-right: none;
-    border-top: 1px solid #F0E0D0;
+    border-top: 1px solid #E0F0FF;
   }
   
   .sidebar.expanded {

@@ -237,8 +237,12 @@ const handleSubmit = async () => {
     // 通知父组件注册成功
     emit('success')
     
-    // 跳转到PPT展示页面
-    router.push('/ppt-show')
+    // 根据角色跳转到不同页面
+    if (selectedRole.value === 'teacher') {
+      router.push('/ppt-show2')
+    } else {
+      router.push('/ppt-show')
+    }
   } catch (error) {
     console.error('注册失败', error)
     alert('注册失败，请重试')
