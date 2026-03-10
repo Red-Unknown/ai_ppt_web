@@ -201,19 +201,19 @@ npm run dev
 ```bash
 pip install vosk pydub
 
-安装 ffmpeg（用于音频格式转换）：
+- 安装 ffmpeg（用于音频格式转换）：
 
 Windows：下载并解压后将 ffmpeg.exe 所在目录添加到系统环境变量 PATH 中，或直接将 ffmpeg.exe 放在项目目录下。
 
 Linux/macOS：使用包管理器安装，如 sudo apt install ffmpeg。
 
 
-代码配置
+- 代码配置
 MODEL_PATH = "models/vosk-model-small-cn-0.22"
 model = Model(MODEL_PATH)
 如需更换其他模型（如标准版或英文模型），只需修改此路径并重启服务。
 
-注意事项
+- 注意事项
 1、首次加载模型可能需要几十秒，请耐心等待。
 2、若出现音频转换错误，请检查 ffmpeg 是否正确安装。
 3、小模型对背景噪音敏感，建议在安静环境下录音。
