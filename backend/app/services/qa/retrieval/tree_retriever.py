@@ -108,6 +108,7 @@ class TreeStructureRetriever(BaseRetriever):
         1. Hybrid Search (Dense + BM25 + Keyword)
         2. Tree Expansion (Context Enrichment)
         3. Path-aware Reranking (Relevance Tuning)
+        4. Visual Data Injection (Mock for Demo)
         """
         # 1. Search
         candidates = self._hybrid_search(query)
@@ -118,7 +119,44 @@ class TreeStructureRetriever(BaseRetriever):
         # 3. Path Reranking
         final_results = self._rerank_by_path(candidates, self.current_path)
         
+        # 4. Inject Visual Mock Data (For "Show, Don't Just Tell")
+        final_results = self._inject_visual_mock_data(final_results)
+        
         return final_results[:self.top_k]
+
+    def _inject_visual_mock_data(self, documents: List[Document]) -> List[Document]:
+        """
+        Injects mock bounding boxes and image URLs for visual grounding.
+        If real data is missing, this ensures the frontend has something to display.
+        """
+        import random
+        
+        # Mock Slide Images (Placeholder Service)
+        BASE_SLIDE_URL = "https://cdn.example.com/slides/course_101"
+        
+        for i, doc in enumerate(documents):
+            # 1. Page Number (Mock if missing)
+            if "page_num" not in doc.metadata:
+                # Deterministic pseudo-random based on title length
+                doc.metadata["page_num"] = (len(doc.metadata.get("title", "")) % 20) + 1
+            
+            # 2. Image URL
+            if "image_url" not in doc.metadata:
+                page = doc.metadata["page_num"]
+                doc.metadata["image_url"] = f"{BASE_SLIDE_URL}/slide_{page:02d}.jpg"
+                
+            # 3. Bounding Box [x, y, w, h] (Normalized 0-1)
+            # Mocking different regions: Header, Content, Footer
+            if "bbox" not in doc.metadata:
+                region_type = i % 3
+                if region_type == 0: # Top (Header/Title)
+                    doc.metadata["bbox"] = [0.1, 0.1, 0.8, 0.15]
+                elif region_type == 1: # Middle (Main Content)
+                    doc.metadata["bbox"] = [0.1, 0.3, 0.8, 0.4]
+                else: # Specific Chart/Diagram area
+                    doc.metadata["bbox"] = [0.5, 0.4, 0.4, 0.3]
+                    
+        return documents
 
     def _hybrid_search(self, query: str) -> List[Document]:
         """

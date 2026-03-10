@@ -110,6 +110,47 @@ class StudentStateManager:
     HISTORY_PREFIX = "student:history:"
     SESSIONS_PREFIX = "student:sessions:"
     EVENTS_PREFIX = "student:events:"
+    MASTERY_PREFIX = "student:mastery:"
+
+    @staticmethod
+    def _get_mastery_key(user_id: str, topic: str) -> str:
+        return f"{StudentStateManager.MASTERY_PREFIX}{user_id}:{topic}"
+
+    @classmethod
+    def update_mastery(cls, user_id: str, topic: str, is_correct: bool):
+        """
+        Update knowledge mastery using simplified Bayesian Knowledge Tracing (BKT).
+        P(L) = P(L|Correct) if correct else P(L|Incorrect)
+        """
+        key = cls._get_mastery_key(user_id, topic)
+        current_prob = float(redis_client.get(key) or 0.5)
+        
+        # BKT Parameters (Simplified)
+        P_G = 0.3  # Guess
+        P_S = 0.1  # Slip
+        P_T = 0.1  # Transit
+        
+        if is_correct:
+            # P(L|Correct) = (P(L) * (1 - P_S)) / (P(L) * (1 - P_S) + (1 - P(L)) * P_G)
+            num = current_prob * (1 - P_S)
+            den = num + (1 - current_prob) * P_G
+        else:
+            # P(L|Incorrect) = (P(L) * P_S) / (P(L) * P_S + (1 - P(L)) * (1 - P_G))
+            num = current_prob * P_S
+            den = num + (1 - current_prob) * (1 - P_G)
+            
+        posterior = num / den
+        # Update with Transit: P(L)_new = P(L)_posterior + (1 - P(L)_posterior) * P_T
+        new_prob = posterior + (1 - posterior) * P_T
+        
+        redis_client.set(key, str(min(0.99, max(0.01, new_prob))))
+        return new_prob
+
+    @classmethod
+    def get_mastery(cls, user_id: str, topic: str) -> float:
+        """Get current mastery probability for a topic."""
+        key = cls._get_mastery_key(user_id, topic)
+        return float(redis_client.get(key) or 0.5)
 
     @staticmethod
     def _get_profile_key(user_id: str) -> str:

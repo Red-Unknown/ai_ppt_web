@@ -302,6 +302,17 @@ class QAService:
             StudentStateManager.append_event(session_id, event)
         return json.dumps(event)
 
+    def _create_resume_event(self, timestamp: float) -> Dict[str, Any]:
+        """Create a resume event to jump back to video timestamp."""
+        return {
+            "type": "resume",
+            "data": {
+                "timestamp": timestamp,
+                "message": "已为您解答完毕，点击继续学习",
+                "strategy": "auto_resume"
+            }
+        }
+
     async def stream_answer_question(self, request: ChatRequest, user_id: str = "student_001") -> AsyncGenerator[str, None]:
         """
         Stream response for WebSocket using Server-Sent Events style JSON chunks.
@@ -321,6 +332,10 @@ class QAService:
                 
                     suggestions = await self.predict_next_questions(request.query, answer=answer)
                     yield self._emit_event(request.session_id, {"type": "suggestions", "content": suggestions})
+                    
+                    if request.video_timestamp:
+                        yield self._emit_event(request.session_id, self._create_resume_event(request.video_timestamp))
+                        
                     yield self._emit_event(request.session_id, {"type": "end"})
                     return
 
@@ -387,6 +402,10 @@ class QAService:
         
                     yield self._emit_event(request.session_id, {"type": "start", "action": feedback_result.get("action")})
                     
+                    # Emit Strategy Log (State Transition)
+                    if "strategy_log" in feedback_result:
+                        yield self._emit_event(request.session_id, {"type": "strategy", "content": feedback_result["strategy_log"]})
+                    
                     if feedback_result.get("action") == "FALLBACK_VIDEO":
                         yield self._emit_event(request.session_id, {"type": "action", "data": feedback_result})
                         yield self._emit_event(request.session_id, {"type": "token", "content": feedback_result.get("message")})
@@ -400,6 +419,9 @@ class QAService:
                         if "audio_text" in feedback_result:
                              yield self._emit_event(request.session_id, {"type": "action", "data": {"audio_text": feedback_result["audio_text"]}})
         
+                    if request.video_timestamp:
+                        yield self._emit_event(request.session_id, self._create_resume_event(request.video_timestamp))
+                        
                     yield self._emit_event(request.session_id, {"type": "end"})
                     return
         
@@ -422,6 +444,21 @@ class QAService:
                         if request.session_id:
                             SessionManager.cache_docs(request.session_id, request.query, docs)
                         context_str = "\n\n".join([f"【来源：{d.metadata.get('path', '未知路径')}】\n内容：{d.page_content}" for d in docs])
+                        
+                        # Emit Sources Event (Visual Grounding)
+                        if docs:
+                            source_nodes = []
+                            for d in docs:
+                                source_nodes.append({
+                                    "node_id": d.metadata.get("node_id", "unknown"),
+                                    "content": d.page_content[:200] + "...",
+                                    "path": d.metadata.get("path", ""),
+                                    "relevance_score": d.metadata.get("score", 0.0),
+                                    "bbox": d.metadata.get("bbox"),
+                                    "image_url": d.metadata.get("image_url"),
+                                    "page_num": d.metadata.get("page_num")
+                                })
+                            yield self._emit_event(request.session_id, {"type": "sources", "content": source_nodes})
                         
                         # 2. Prepare Input
                         history_list = StudentStateManager.get_history(session_id, limit=20)
@@ -475,6 +512,9 @@ class QAService:
                             except Exception:
                                 pass
 
+                            if request.video_timestamp:
+                                yield self._emit_event(request.session_id, self._create_resume_event(request.video_timestamp))
+
                             yield self._emit_event(request.session_id, {"type": "end"})
                             
                             # Save History
@@ -518,7 +558,22 @@ class QAService:
                     
                     context_str = "\n\n".join([f"【来源：{d.metadata.get('path', '未知路径')}】\n内容：{d.page_content}" for d in docs])
                     logger.info(f"Retrieval Confidence: {top_score:.4f}")
-        
+
+                    # Emit Sources Event (Visual Grounding)
+                    if docs:
+                        source_nodes = []
+                        for d in docs:
+                            source_nodes.append({
+                                "node_id": d.metadata.get("node_id", "unknown"),
+                                "content": d.page_content[:200] + "...",
+                                "path": d.metadata.get("path", ""),
+                                "relevance_score": d.metadata.get("score", 0.0),
+                                "bbox": d.metadata.get("bbox"),
+                                "image_url": d.metadata.get("image_url"),
+                                "page_num": d.metadata.get("page_num")
+                            })
+                        yield self._emit_event(request.session_id, {"type": "sources", "content": source_nodes})
+
                     # 2. Decision Logic (Heuristics)
                     use_react = False
                     use_web_search = False
@@ -726,6 +781,9 @@ class QAService:
                         
                     except Exception as e:
                         logger.error(f"Failed to generate suggestions: {e}")
+
+                    if request.video_timestamp:
+                        yield self._emit_event(request.session_id, self._create_resume_event(request.video_timestamp))
 
                     return
 

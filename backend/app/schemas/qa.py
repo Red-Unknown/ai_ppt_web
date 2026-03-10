@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = Field(None, description="Session ID for conversation history")
     model: Optional[str] = Field("deepseek", description="Model to use: deepseek, gpt-4o")
     prompt_style: Optional[str] = Field("default", description="Prompt style: default, creative, socratic")
+    video_timestamp: Optional[float] = Field(None, description="Current video playback timestamp in seconds for resume anchor")
 
 class SourceNode(BaseModel):
     node_id: str
@@ -22,6 +23,9 @@ class SourceNode(BaseModel):
     path: str
     relevance_score: float
     context: Optional[Dict[str, Any]] = None
+    bbox: Optional[List[float]] = Field(None, description="Bounding box [x, y, w, h] for highlighting")
+    image_url: Optional[str] = Field(None, description="URL to the slide image")
+    page_num: Optional[int] = Field(None, description="Page number of the source document")
 
 class ChatResponse(BaseModel):
     answer: str

@@ -1,9 +1,12 @@
 from typing import Optional, Dict, Any
+import logging
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from backend.app.schemas.student import StudentProfile, StudentState, InteractionMode
 from backend.app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 class TeacherAgent:
     """
@@ -73,31 +76,71 @@ class TeacherAgent:
         context_content: str
     ) -> Dict[str, Any]:
         """
-        Analyze feedback and decide on action (Supplement or Resume).
+        Analyze feedback and decide on action using probabilistic state machine.
+        States:
+        1. NORMAL: Continue learning (Mastery > 0.7)
+        2. SUPPLEMENT: Insert explanation (0.4 < Mastery <= 0.7)
+        3. FALLBACK: Jump to prerequisite or video (Mastery <= 0.4)
         """
-        # Simple sentiment analysis (Mock or LLM)
-        # For now, assume if routed here as FEEDBACK, we check for confusion keywords
+        from backend.app.services.student.state_manager import StudentStateManager
+
+        # 1. Update Mastery based on feedback sentiment
+        # Positive feedback (understood) -> Correct
+        # Negative feedback (confused) -> Incorrect
         confusion_keywords = ["不懂", "没听懂", "困惑", "难", "confused", "hard", "没懂", "不明白", "看不懂", "不明"]
         is_confused = any(k in feedback_text for k in confusion_keywords)
         
+        current_mastery = StudentStateManager.update_mastery(
+            state.session_id, # Using session_id as user_id proxy for demo, ideally use user_id
+            state.current_topic,
+            is_correct=not is_confused
+        )
+        
+        logger.info(f"Updated Mastery for {state.current_topic}: {current_mastery:.2f} (Confused: {is_confused})")
+
+        # 2. Strategy Decision Logic
+        strategy_log = {
+            "topic": state.current_topic,
+            "mastery": round(current_mastery, 2),
+            "prev_state": "NORMAL", # simplified
+            "trigger": "CONFUSION_DETECTED" if is_confused else "FEEDBACK_RECEIVED"
+        }
+
         if is_confused:
-            # Check fallback condition
-            if state.confusion_count >= 2:
+            # High Confusion / Low Mastery -> Fallback
+            if current_mastery < 0.4 or state.confusion_count >= 2:
+                strategy_log["new_state"] = "FALLBACK"
+                strategy_log["action"] = "JUMP_BACK"
+                
                 return {
                     "action": "FALLBACK_VIDEO",
-                    "message": "我看这部分确实比较难，建议你直接观看详细视频讲解。",
-                    "video_jump_link": f"/course/video/{state.current_topic}?t=120" # Mock link
+                    "message": "检测到您对当前知识点掌握度较低，建议回看基础视频讲解。",
+                    "video_jump_link": f"/course/video/{state.current_topic}?t=0", # Reset to start
+                    "strategy_log": strategy_log
                 }
+            
+            # Moderate Confusion -> Supplement
+            strategy_log["new_state"] = "SUPPLEMENT"
+            strategy_log["action"] = "INSERT_EXPLANATION"
             
             # Generate Supplement
             explanation = await self._generate_supplement(state.current_topic, profile, context_content)
             return {
                 "action": "SUPPLEMENT",
                 "content": explanation,
-                "audio_text": explanation
+                "audio_text": explanation,
+                "strategy_log": strategy_log
             }
         
-        return {"action": "RESUME", "message": "好的，我们继续。"}
+        # Not Confused -> Normal Resume
+        strategy_log["new_state"] = "NORMAL"
+        strategy_log["action"] = "CONTINUE"
+        return {
+            "action": "RESUME", 
+            "message": "掌握得不错，我们继续。",
+            "strategy_log": strategy_log
+        }
+
 
     async def _generate_supplement(self, topic: str, profile: StudentProfile, context_content: str) -> str:
         """
