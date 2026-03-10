@@ -1,14 +1,15 @@
 import json
 import os
 import threading
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
+from pathlib import Path
 from backend.app.core.config import settings
 
 _lock = threading.Lock()
 _cache: Dict[str, Any] = {}
 _mtime: Optional[float] = None
 
-def _load_file(path: str) -> Dict[str, Any]:
+def _load_file(path: Union[str, Path]) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 

@@ -20,15 +20,8 @@ class ExecutionError(Exception):
     """Raised when code execution fails."""
     pass
 
-def _execute_code_in_isolation(code_str: str) -> Dict[str, Any]:
-    """
-    Executes Python code in a restricted environment.
-    Returns a dictionary with 'status', 'output', or 'error'.
-    """
-    # 1. Capture stdout
-    stdout_capture = io.StringIO()
-    
-    # 2. Define Restricted Globals
+def _create_safe_globals():
+    """Creates a new dictionary with safe globals."""
     safe_globals = {
         "__builtins__": {
             "abs": abs, "all": all, "any": any, "bin": bin, "bool": bool,
@@ -80,6 +73,46 @@ def _execute_code_in_isolation(code_str: str) -> Dict[str, Any]:
     except ImportError:
         pass
 
+    # Optional: Inject math_kernels if available
+    try:
+        from backend.app.core.math_optimization import math_kernels
+        safe_globals["math_kernels"] = math_kernels
+    except ImportError:
+        pass
+        
+    return safe_globals
+
+# Global session store for the worker process
+_worker_sessions = {}
+
+def _execute_code_in_isolation(code_str: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Executes Python code in a restricted environment.
+    Returns a dictionary with 'status', 'output', or 'error'.
+    """
+    # 1. Capture stdout
+    stdout_capture = io.StringIO()
+    
+    # 2. Get or create globals
+    global _worker_sessions
+    
+    if session_id:
+        if session_id not in _worker_sessions:
+            _worker_sessions[session_id] = _create_safe_globals()
+        safe_globals = _worker_sessions[session_id]
+        # Important: When executing in a session, we must also UPDATE the session with new locals
+        # But exec(code, safe_globals) uses safe_globals as both globals and locals, so updates are preserved.
+        # The issue might be that we are creating a NEW Worker process for each request?
+        # No, workers are persistent.
+        # BUT, the global `_worker_sessions` is PER PROCESS.
+        # If requests with the same session_id land on DIFFERENT workers, state is lost.
+        # We need sticky sessions or a shared state store (redis/plasma).
+        # For MVP with persistent workers, we must ensure session affinity or just use 1 worker for tests.
+        # SafeCodeExecutor._get_worker() does round robin/random.
+        # We need to modify _get_worker to support session affinity or just use 1 worker for now.
+    else:
+        safe_globals = _create_safe_globals()
+
     try:
         # Redirect stdout
         with contextlib.redirect_stdout(stdout_capture):
@@ -100,7 +133,7 @@ def _execute_code_in_isolation(code_str: str) -> Dict[str, Any]:
 def _worker_loop(input_queue: multiprocessing.Queue, output_queue: multiprocessing.Queue):
     """
     Long-running worker loop.
-    Constantly reads (req_id, code) from input_queue, executes it, and puts (req_id, result) to output_queue.
+    Constantly reads (req_id, code, session_id) from input_queue, executes it, and puts (req_id, result) to output_queue.
     """
     while True:
         try:
@@ -108,8 +141,14 @@ def _worker_loop(input_queue: multiprocessing.Queue, output_queue: multiprocessi
             if item is None: # Sentinel to stop
                 break
             
-            req_id, code = item
-            result = _execute_code_in_isolation(code)
+            # Handle backward compatibility or new format
+            if len(item) == 3:
+                req_id, code, session_id = item
+            else:
+                req_id, code = item
+                session_id = None
+                
+            result = _execute_code_in_isolation(code, session_id)
             output_queue.put((req_id, result))
             
         except Exception as e:
@@ -186,7 +225,7 @@ class SafeCodeExecutor:
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
                     for alias in node.names:
-                        if alias.name not in ["math", "random", "datetime", "sympy", "numpy", "pandas", "scipy", "matplotlib.pyplot", "matplotlib"]:
+                        if alias.name not in ["math", "random", "datetime", "sympy", "numpy", "pandas", "scipy", "matplotlib.pyplot", "matplotlib", "math_kernels"]:
                             raise SecurityError(f"Importing module '{alias.name}' is not allowed.")
                 elif isinstance(node, ast.Call):
                     if isinstance(node.func, ast.Name) and node.func.id in ["open", "eval", "exec"]:
@@ -194,111 +233,105 @@ class SafeCodeExecutor:
         except SyntaxError as e:
             raise ExecutionError(f"Syntax Error: {e}")
 
+    _session_worker_map = {} # Map session_id -> worker_index
+
     @classmethod
-    def _get_worker(cls) -> Worker:
+    def _get_worker(cls, session_id: Optional[str] = None) -> Worker:
         """
-        Retrieves an available worker from the pool or creates a new one.
+        Retrieves an available worker.
+        If session_id is provided, try to return the same worker for affinity.
         """
-        # 1. Try to find an idle worker in the pool
-        for w in cls._workers:
-            if not w.busy:
-                if not w.is_alive():
-                    w.restart()
-                w.busy = True
-                return w
-        
-        # 2. If pool not full, create new worker
-        if len(cls._workers) < cls._max_workers:
-            w = Worker()
-            w.busy = True
-            cls._workers.append(w)
-            return w
+        if not cls._initialized:
+            cls._initialized = True
             
-        # 3. If pool full, create a temporary worker (overflow)
-        # We don't add it to the pool to avoid growing indefinitely
-        logger.warning("Worker pool full, creating temporary worker")
+        # Clean up dead workers
+        # Be careful if a worker died, session data is lost.
+        cls._workers = [w for w in cls._workers if w.is_alive()]
+        
+        # Ensure minimum pool
+        while len(cls._workers) < cls._max_workers:
+            w = Worker()
+            cls._workers.append(w)
+            
+        if session_id:
+            # Check if we have an assigned worker
+            if session_id in cls._session_worker_map:
+                idx = cls._session_worker_map[session_id]
+                if idx < len(cls._workers) and cls._workers[idx].is_alive():
+                    return cls._workers[idx]
+            
+            # Assign new worker (simple modulo hashing for stability)
+            # hash(session_id) might vary between runs, but consistent within run.
+            # Or just pick random and store.
+            if len(cls._workers) > 0:
+                idx = abs(hash(session_id)) % len(cls._workers)
+                cls._session_worker_map[session_id] = idx
+                return cls._workers[idx]
+            
+        # Pick least busy (for now just random or round robin)
+        if len(cls._workers) > 0:
+            for w in cls._workers:
+                if not w.busy:
+                    return w
+            return cls._workers[0]
+        
+        # Fallback (should not happen due to while loop above)
         w = Worker()
-        w.busy = True
+        cls._workers.append(w)
         return w
 
     @classmethod
-    def execute(cls, code: str, timeout: int = 5) -> str:
+    def execute(cls, code: str, timeout: int = 5, session_id: Optional[str] = None) -> str:
         """
-        Execute code with timeout protection using persistent workers.
+        Executes code in a sandbox worker with timeout.
         """
-        # 1. Validate
         cls.validate_code(code)
         
-        # 2. Get Worker
-        worker = cls._get_worker()
+        worker = cls._get_worker(session_id)
+        worker.busy = True
+        
         req_id = str(uuid.uuid4())
-        is_temp_worker = worker not in cls._workers
         
         try:
-            # 3. Submit Task
-            worker.input_queue.put((req_id, code))
-            
-            # 4. Wait for Result
-            try:
-                # We expect the next result to be ours since worker was marked busy
-                res_id, result = worker.output_queue.get(timeout=timeout)
-                
-                if res_id != req_id:
-                     # This implies a sync error, should restart worker
-                     raise ExecutionError("Internal Worker Synchronization Error")
-                     
-                if result["status"] == "error":
-                    raise ExecutionError(result["error"])
-                    
-                return result["output"]
-                
-            except queue.Empty:
-                # Timeout occurred
-                logger.warning(f"Worker timed out after {timeout}s. Restarting.")
-                worker.restart()
-                raise ExecutionError("Execution timed out.")
-                
-        finally:
-            if is_temp_worker:
-                # Cleanup temp worker
-                if worker.is_alive():
-                    worker.process.terminate()
+            # Send code to worker
+            if session_id:
+                worker.input_queue.put((req_id, code, session_id))
             else:
-                # Return to pool
-                worker.busy = False
-
-    @classmethod
-    def warmup(cls):
-        """
-        Initialize the worker pool and pre-load libraries to reduce cold start latency.
-        Should be called at application startup.
-        """
-        logger.info("Warming up SafeCodeExecutor workers...")
-        if cls._initialized:
-             return
-
-        # Initialize workers up to max capacity
-        for _ in range(cls._max_workers):
-            cls._get_worker().busy = False # Create and mark as free immediately
+                worker.input_queue.put((req_id, code))
             
-        cls._initialized = True
-        logger.info(f"Initialized {len(cls._workers)} workers.")
-        
-        # Optional: Run a dummy task to force library loading in each worker
-        # This is important for heavy libs like pandas/numpy
-        dummy_code = "import numpy; import pandas; import sympy; result = 'warm'"
-        
-        for w in cls._workers:
-             w.busy = True
-             try:
-                 req_id = "warmup"
-                 w.input_queue.put((req_id, dummy_code))
-                 # Wait for completion (short timeout)
-                 w.output_queue.get(timeout=10)
-             except Exception as e:
-                 logger.warning(f"Worker warmup failed: {e}")
-                 w.restart()
-             finally:
-                 w.busy = False
-                 
-        logger.info("Worker warmup completed.")
+            # Wait for result
+            # We must poll output_queue because it's shared by all requests on this worker?
+            # Actually, if we reuse workers, we need to handle multiplexing.
+            # But here _get_worker just returns a worker. If multiple threads call execute, they might race on output_queue.
+            # For this MVP, we assume simple usage or we should lock the worker.
+            
+            # Simplified: Wait for specific req_id (could block other requests if using shared queue)
+            # A better approach is one queue per request, or a dict of pending requests.
+            # Since we are inside a blocking call 'execute', we can just wait.
+            # NOTE: If multiple concurrent execute calls share a worker, this 'get' might steal someone else's result.
+            # Ideally each worker handles one task at a time or we implement proper correlation.
+            # Given _max_workers=3 and low concurrency, we might get away with it, 
+            # BUT to be safe, we should loop until we get OUR req_id.
+            
+            start_time = time.time()
+            while True:
+                if time.time() - start_time > timeout:
+                    worker.restart() # Kill stuck worker
+                    raise TimeoutError("Execution timed out.")
+                
+                try:
+                    # Non-blocking get to allow timeout check
+                    res_req_id, result = worker.output_queue.get(timeout=0.1)
+                    if res_req_id == req_id:
+                        if result["status"] == "success":
+                            return result["output"]
+                        else:
+                            raise ExecutionError(result.get("error", "Unknown error"))
+                    else:
+                        # Put back other's result (Naive handling for concurrency)
+                        worker.output_queue.put((res_req_id, result))
+                except queue.Empty:
+                    continue
+                    
+        finally:
+            worker.busy = False

@@ -33,9 +33,9 @@ class DialogueRouter:
         self.prompt = ChatPromptTemplate.from_template(
             """
             Classify the student's input into one of the following categories:
-            - QA: Questions about the course content (e.g., "What is a gradient?", "Why use ReLU?").
+            - QA: Questions about the course content, including requests to show specific slides, formulas, or examples (e.g., "What is a gradient?", "Show me the slide about Newton's law", "Explain this formula").
             - FEEDBACK: Feedback about their learning state or the lecture pace (e.g., "I'm confused", "Too fast", "I don't understand").
-            - CONTROL: Commands to control the playback (e.g., "Pause", "Resume", "Next").
+            - CONTROL: Commands to control the playback flow only (e.g., "Pause", "Resume", "Next page", "Stop").
             
             Input: {query}
             

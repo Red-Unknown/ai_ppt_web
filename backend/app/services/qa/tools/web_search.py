@@ -3,10 +3,18 @@ import asyncio
 from typing import Dict, Any, List, Optional
 import logging
 import os
+import json
+import hashlib
+from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from backend.app.core.context import session_id_ctx, request_id_ctx
 from backend.app.services.session.manager import SessionManager
 from backend.app.core.rate_limiter import tavily_limiter
+
+# Cache for frequent queries
+_query_cache = {}
+_CACHE_TTL = timedelta(hours=1)  # Cache for 1 hour
+_CACHE_MAX_SIZE = 1000  # Maximum cache entries
 
 try:
     import html2text
@@ -44,6 +52,14 @@ except ImportError:
     HAS_TAVILY_V2 = False
     TavilySearchResultsV2 = None
 
+# Try importing Tavily Python SDK for direct access
+try:
+    from tavily import AsyncTavilyClient
+    HAS_TAVILY_SDK = True
+except ImportError:
+    HAS_TAVILY_SDK = False
+    AsyncTavilyClient = None
+
 logger = logging.getLogger(__name__)
 
 class WebSearchSkill(BaseSkill):
@@ -53,22 +69,38 @@ class WebSearchSkill(BaseSkill):
         self._session = None
         
         # Priority 1: Tavily (Better for RAG/LLM)
-        if os.environ.get("TAVILY_API_KEY"):
+        tavily_api_key = os.environ.get("TAVILY_API_KEY")
+        if tavily_api_key:
             try:
-                # Disable include_answer to speed up search (Agent will handle the answer)
-                if HAS_TAVILY_V2 and TavilySearchResultsV2:
-                    self.search_tool = TavilySearchResultsV2(max_results=5, include_answer=False)
+                # Check if it's a production key (starts with tvly- but not tvly-dev-)
+                is_production_key = tavily_api_key.startswith("tvly-") and not tavily_api_key.startswith("tvly-dev-")
+                
+                # Try direct SDK first for better control and auto_parameters
+                if HAS_TAVILY_SDK and AsyncTavilyClient:
+                    self.tavily_client = AsyncTavilyClient(api_key=tavily_api_key)
+                    self.engine = "tavily_sdk"
+                    
+                    # Enable auto_parameters only for production keys (performance optimization)
+                    self.use_auto_parameters = is_production_key
+                    
+                    if is_production_key:
+                        logger.info("WebSearchSkill initialized with Tavily Python SDK (PRODUCTION mode with auto_parameters).")
+                    else:
+                        logger.info("WebSearchSkill initialized with Tavily Python SDK (TEST mode, auto_parameters disabled).")
+                # Fallback to LangChain tools
+                elif HAS_TAVILY_V2 and TavilySearchResultsV2:
+                    self.search_tool = TavilySearchResultsV2(max_results=5, include_answer=False, search_depth="ultra-fast")
                     self.engine = "tavily"
-                    logger.info("WebSearchSkill initialized with Tavily Search V2 (include_answer=False).")
+                    logger.info("WebSearchSkill initialized with Tavily Search V2 (include_answer=False, search_depth=ultra-fast).")
                 elif HAS_TAVILY and TavilySearchResults:
-                    self.search_tool = TavilySearchResults(max_results=5, include_answer=False)
+                    self.search_tool = TavilySearchResults(max_results=5, include_answer=False, search_depth="ultra-fast")
                     self.engine = "tavily"
-                    logger.info("WebSearchSkill initialized with Tavily Search (include_answer=False).")
+                    logger.info("WebSearchSkill initialized with Tavily Search (include_answer=False, search_depth=ultra-fast).")
             except Exception as e:
                 logger.warning(f"Failed to initialize Tavily Search: {e}")
 
         # Priority 2: DuckDuckGo (Free, no key)
-        if not self.search_tool and HAS_DDG:
+        if self.engine == "none" and HAS_DDG:
             try:
                 # Use DuckDuckGoSearchResults to get list of dicts instead of string
                 # Note: 'backend' parameter "api" is often more stable for structured data
@@ -81,7 +113,7 @@ class WebSearchSkill(BaseSkill):
                 logger.warning(f"Failed to initialize DuckDuckGo Search: {e}")
                 self.search_tool = None
         
-        if not self.search_tool:
+        if self.engine == "none":
             logger.warning("No web search tool available (Tavily or DuckDuckGo). Web Search will be mocked.")
 
     @property
@@ -159,6 +191,34 @@ class WebSearchSkill(BaseSkill):
             
         return "Failed to scrape content after retries."
 
+    def _get_cache_key(self, query: str) -> str:
+        """Generate cache key for query."""
+        return hashlib.md5(query.encode()).hexdigest()
+
+    def _get_from_cache(self, query: str) -> Optional[Dict[str, Any]]:
+        """Get cached result for query."""
+        cache_key = self._get_cache_key(query)
+        if cache_key in _query_cache:
+            cached_data, timestamp = _query_cache[cache_key]
+            if datetime.now() - timestamp < _CACHE_TTL:
+                logger.info(f"Cache hit for query: {query}")
+                return cached_data
+            else:
+                # Remove expired cache
+                del _query_cache[cache_key]
+        return None
+
+    def _save_to_cache(self, query: str, result: Dict[str, Any]):
+        """Save result to cache."""
+        if len(_query_cache) >= _CACHE_MAX_SIZE:
+            # Remove oldest entry if cache is full
+            oldest_key = min(_query_cache.keys(), key=lambda k: _query_cache[k][1])
+            del _query_cache[oldest_key]
+        
+        cache_key = self._get_cache_key(query)
+        _query_cache[cache_key] = (result, datetime.now())
+        logger.info(f"Saved to cache: {query}")
+
     async def execute(self, query: str, **kwargs) -> Dict[str, Any]:
         """
         Execute web search with retry mechanism and strict session limit.
@@ -167,6 +227,13 @@ class WebSearchSkill(BaseSkill):
         start_time = time.time()
         # Use context request_id if available, fallback to kwargs
         request_id = request_id_ctx.get() or kwargs.get("request_id", "unknown")
+        
+        # Check cache first for frequent queries
+        cached_result = self._get_from_cache(query)
+        if cached_result:
+            cached_result["details"]["cache_hit"] = True
+            cached_result["details"]["latency_ms"] = 1  # Cache response is almost instant
+            return cached_result
         
         # --- Strict Search Limit Check (Atomic) ---
         session_id = session_id_ctx.get()
@@ -200,7 +267,7 @@ class WebSearchSkill(BaseSkill):
             
         logger.info(f"[ReqID:{request_id}] Executing web search with engine: {self.engine}, query: {optimized_query}")
 
-        if not self.search_tool:
+        if self.engine == "none":
             process_steps.append("Search tool unavailable. Using mock fallback.")
             return self._mock_result(query, "Library not installed", process_steps, start_time)
             
@@ -218,7 +285,29 @@ class WebSearchSkill(BaseSkill):
 
             for attempt in range(retries):
                 try:
-                    if self.engine == "tavily":
+                    if self.engine == "tavily_sdk":
+                        # Use Tavily SDK directly with auto_parameters for intelligent optimization
+                        async with tavily_limiter:
+                            results = await self.tavily_client.search(
+                            query=optimized_query,
+                            max_results=5,
+                            search_depth="ultra-fast",
+                            include_answer=False,
+                            include_raw_content=False,
+                            include_images=False,
+                            auto_parameters=self.use_auto_parameters  # Enable only for production keys
+                        )
+                        structured_results = [
+                            {
+                                "title": res.get("title", "Tavily Result"), 
+                                "link": res.get("url"),
+                                "snippet": res.get("content", "")
+                            }
+                            for res in results.get("results", [])
+                        ]
+                        raw_output = str(results)
+                        break # Success
+                    elif self.engine == "tavily":
                         # Tavily returns a list of dicts directly via invoke
                         async with tavily_limiter:
                             results = await self.search_tool.ainvoke(optimized_query)
@@ -311,8 +400,8 @@ class WebSearchSkill(BaseSkill):
             
             latency_ms = int((time.time() - start_time) * 1000)
             logger.info(f"[ReqID:{request_id}] Search completed. Engine: {self.engine}, Latency: {latency_ms}ms, Results: {len(structured_results)}")
-
-            return {
+            
+            result = {
                 "status": "success",
                 "content": f"Found {len(structured_results)} results:\n{summary[:500]}...",
                 "details": {
@@ -323,9 +412,15 @@ class WebSearchSkill(BaseSkill):
                     "latency_ms": latency_ms,
                     "status_code": 200,
                     "request_id": request_id,
-                    "process": process_steps
+                    "process": process_steps,
+                    "cache_hit": False
                 }
             }
+            
+            # Save to cache for future queries
+            self._save_to_cache(query, result)
+            
+            return result
             
         except Exception as e:
             logger.error(f"[ReqID:{request_id}] Web Search Error: {e}")
