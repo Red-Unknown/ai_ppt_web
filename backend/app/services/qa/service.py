@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 import tiktoken
 from backend.app.core.rate_limiter import deepseek_limiter
+from openai import AsyncOpenAI
+from langchain_community.adapters.openai import convert_message_to_dict
 
 class ConfigurationError(Exception):
     """Raised when required configuration is missing."""
@@ -433,7 +435,154 @@ class QAService:
                     qa_type = await self.analyzer.analyze(request.query)
                     logger.info(f"QA Type: {qa_type}")
         
-                    # --- DEEPSEEK REASONER BYPASS START ---
+                    # --- DUAL STREAM REASONING START ---
+                    if request.enable_reasoning:
+                        yield self._emit_event(request.session_id, {"type": "status", "content": "启动双流推理模式..."})
+                        
+                        # Task A: Quick Answer (Direct RAG)
+                        # We run this in a background task but we need to stream it FIRST.
+                        # Actually, we can just run it sequentially for the user perception, 
+                        # or better: asyncio.gather if we can handle interleaved streams.
+                        # But for simplicity and clarity:
+                        # 1. Quick Answer Stream
+                        # 2. Deep Reasoning Stream (Async)
+                        
+                        # Let's do Quick Answer first (Blocking but fast)
+                        yield self._emit_event(request.session_id, {"type": "status", "content": "正在生成快速回答..."})
+                        
+                        # Quick RAG (Standard DeepSeek-Chat)
+                        # 1. Retrieve (Fast)
+                        docs = self.retriever.invoke(request.query)
+                        context_str = "\n\n".join([f"【来源：{d.metadata.get('path', '未知路径')}】\n内容：{d.page_content}" for d in docs])
+                        
+                        # Emit Sources
+                        if docs:
+                            source_nodes = []
+                            for d in docs:
+                                source_nodes.append({
+                                    "node_id": d.metadata.get("node_id", "unknown"),
+                                    "content": d.page_content[:200] + "...",
+                                    "path": d.metadata.get("path", ""),
+                                    "relevance_score": d.metadata.get("score", 0.0),
+                                    "bbox": d.metadata.get("bbox"),
+                                    "image_url": d.metadata.get("image_url"),
+                                    "page_num": d.metadata.get("page_num")
+                                })
+                            yield self._emit_event(request.session_id, {"type": "sources", "content": source_nodes})
+                        
+                        # 2. Generate Quick Answer
+                        history_list = StudentStateManager.get_history(session_id, limit=5) # Less history for speed
+                        history_str = self._truncate_history_by_tokens(history_list, max_tokens=1000)
+                        
+                        prompt_template = self.get_prompt_template("v5_enhanced_zh")
+                        chain_input = {"context": context_str, "question": request.query, "history": history_str}
+                        formatted_messages = prompt_template.format_messages(**chain_input)
+                        
+                        quick_answer_acc = ""
+                        llm_quick = self.llm_clients["qa"] # Standard model
+                        
+                        try:
+                            async for chunk in llm_quick.astream(formatted_messages):
+                                if chunk.content:
+                                    content_str = str(chunk.content)
+                                    quick_answer_acc += content_str
+                                    # Send as quick_answer event
+                                    yield self._emit_event(request.session_id, {"type": "quick_answer", "content": content_str})
+                        except Exception as e:
+                            logger.error(f"Quick answer failed: {e}")
+                            
+                        # 3. Start Deep Reasoning (DeepSeek Reasoner)
+                        yield self._emit_event(request.session_id, {"type": "status", "content": "正在进行深度思考..."})
+                        yield self._emit_event(request.session_id, {"type": "reasoning_start"})
+                        
+                        llm_reasoner = self.llm_clients.get("reasoner", self.llm_clients["qa"])
+                        full_reasoning = ""
+                        full_deep_answer = ""
+                        
+                        try:
+                            # Use same context but maybe more history?
+                            history_list_deep = StudentStateManager.get_history(session_id, limit=20)
+                            history_str_deep = self._truncate_history_by_tokens(history_list_deep, max_tokens=2000)
+                            chain_input_deep = {"context": context_str, "question": request.query, "history": history_str_deep}
+                            formatted_messages_deep = prompt_template.format_messages(**chain_input_deep)
+                            
+                            # Use raw OpenAI client to capture reasoning_content (DeepSeek R1)
+                            # LangChain currently might strip unknown fields from delta
+                            openai_messages = [convert_message_to_dict(m) for m in formatted_messages_deep]
+                            
+                            client = AsyncOpenAI(
+                                api_key=settings.DEEPSEEK_API_KEY,
+                                base_url=settings.DEEPSEEK_BASE_URL
+                            )
+
+                            async with deepseek_limiter:
+                                stream = await client.chat.completions.create(
+                                    model=settings.DEEPSEEK_REASONER_MODEL,
+                                    messages=openai_messages,
+                                    stream=True
+                                )
+                                
+                                async for chunk in stream:
+                                    if not chunk.choices:
+                                        continue
+                                        
+                                    delta = chunk.choices[0].delta
+                                    
+                                    # Extract reasoning
+                                    reasoning = ""
+                                    if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+                                        reasoning = delta.reasoning_content
+                                    
+                                    if reasoning:
+                                        reasoning_str = str(reasoning)
+                                        full_reasoning += reasoning_str
+                                        yield self._emit_event(request.session_id, {"type": "reasoning_content", "content": reasoning_str})
+                                    
+                                    if delta.content:
+                                        content_str = str(delta.content)
+                                        full_deep_answer += content_str
+                                        yield self._emit_event(request.session_id, {"type": "enhanced_answer", "content": content_str})
+                            
+                            yield self._emit_event(request.session_id, {"type": "reasoning_end"})
+                            
+                            # Finalize
+                            # Save History (Prefer Deep Answer)
+                            final_answer = full_deep_answer if full_deep_answer else quick_answer_acc
+                            try:
+                                StudentStateManager.add_history(session_id, "user", request.query)
+                                StudentStateManager.add_history(
+                                    session_id, 
+                                    "assistant", 
+                                    final_answer,
+                                    reasoning=full_reasoning if full_reasoning else None
+                                )
+                                if full_reasoning:
+                                    StudentStateManager.save_session_context(session_id, thinking_path=full_reasoning)
+                            except Exception as e:
+                                logger.error(f"Failed to save history: {e}")
+                                
+                            # Suggestions
+                            try:
+                                suggestions = await self.predict_next_questions(request.query, answer=final_answer, context=context_str)
+                                yield self._emit_event(request.session_id, {"type": "suggestions", "content": suggestions})
+                            except Exception:
+                                pass
+
+                            if request.video_timestamp:
+                                yield self._emit_event(request.session_id, self._create_resume_event(request.video_timestamp))
+
+                            yield self._emit_event(request.session_id, {"type": "end"})
+                            return
+                            
+                        except Exception as e:
+                            logger.error(f"Deep reasoning failed: {e}")
+                            yield self._emit_event(request.session_id, {"type": "error", "content": f"Deep Reasoning Error: {str(e)}"})
+                            yield self._emit_event(request.session_id, {"type": "end"})
+                            return
+
+                    # --- DUAL STREAM REASONING END ---
+
+                    # --- DEEPSEEK REASONER BYPASS START (Legacy/Single Stream) ---
                     if request.model == "deepseek-reasoner":
                         yield self._emit_event(request.session_id, {"type": "status", "content": "已切换至深度思考模式 (Reasoning)..."})
                         

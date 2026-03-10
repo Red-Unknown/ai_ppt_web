@@ -56,13 +56,13 @@ def setup_logging():
     )
 
     # 文件输出 - 主日志 (自动轮转)
-    # rotation="10 MB": 文件达到 10MB 时轮转
+    # rotation="1 MB": 文件达到 1MB 时轮转
     # retention=5: 保留 5 个历史文件
     # compression="zip": 压缩历史日志
     # enqueue=True: 进程安全，解决 Windows 文件占用问题
     logger.add(
         log_dir / "app.log",
-        rotation="10 MB",
+        rotation="1 MB",
         retention=5,
         compression="zip",
         enqueue=True,

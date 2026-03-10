@@ -149,19 +149,70 @@
 (保持原有内容不变...)
 
 ### 3.6 双流响应 (Dual-Stream Response) [新增方案三]
-为了平衡响应速度与深度推理，系统支持 Quick Answer + Deep Reasoning 并行输出。
+为了平衡响应速度与深度推理，系统支持 Quick Answer + Deep Reasoning 并行输出。此模式下，WebSocket 连接将依次推送“快速回答”流和“深度推理”流。
 
-#### 交互模式
-1. **Quick Answer**: 立即返回基于缓存或轻量模型的简短回答。
-2. **Deep Reasoning**: 后台异步进行深度检索和推理，完成后流式推送到前端更新答案。
+#### 请求参数
+在 `ChatRequest` 中设置 `enable_reasoning=true` 以启用此模式。
 
-#### WebSocket 扩展
-- **消息类型**:
-  - `quick_answer`: 快速回答内容。
-  - `reasoning_start`: 开始深度推理。
-  - `reasoning_content`: 深度推理过程（思考链）。
-  - `reasoning_end`: 深度推理结束。
-  - `enhanced_answer`: 最终的深度回答（用于替换或补充 Quick Answer）。
+```json
+{
+  "query": "量子纠缠的原理是什么？",
+  "session_id": "sess_123",
+  "enable_reasoning": true
+}
+```
+
+#### 交互时序与消息类型
+1. **Quick Answer (快速响应)**: 立即返回基于缓存或轻量模型的简短回答。
+   - 消息类型: `quick_answer`
+   - 前端行为: 立即展示，作为占位符或初步答案。
+
+2. **Reasoning Start (开始推理)**: 后台异步进行深度检索和推理。
+   - 消息类型: `reasoning_start`
+   - 前端行为: 显示“正在深度思考...”加载状态或折叠面板。
+
+3. **Reasoning Content (思考链)**: 推送深度推理过程。
+   - 消息类型: `reasoning_content`
+   - 前端行为: 在折叠面板中流式显示思考过程（类似 DeepSeek 官网效果）。
+
+4. **Enhanced Answer (增强回答)**: 最终的深度回答。
+   - 消息类型: `enhanced_answer`
+   - 前端行为: 深度回答生成完毕后，替换或补充 Quick Answer。
+
+#### 响应示例
+```json
+// 1. 快速回答流
+{"type": "quick_answer", "content": "量"}
+{"type": "quick_answer", "content": "子"}
+{"type": "quick_answer", "content": "纠"}
+{"type": "quick_answer", "content": "缠..."}
+
+// 2. 开始深度思考
+{"type": "reasoning_start"}
+
+// 3. 思考过程流
+{"type": "reasoning_content", "content": "检索到相关论文..."}
+{"type": "reasoning_content", "content": "分析贝尔不等式..."}
+
+// 4. 深度回答流 (替换快速回答)
+{"type": "enhanced_answer", "content": "量子纠缠是一种物理现象..."}
+{"type": "enhanced_answer", "content": "当两个粒子..."}
+
+// 5. 结束
+{"type": "reasoning_end"}
+```
+
+#### 状态码与错误处理
+- **正常流程**: 所有流正常结束。
+- **推理超时/失败**: 若深度推理失败，前端应保留 Quick Answer，并显示“深度思考暂时不可用”提示。
+  - 错误消息: `{"type": "error", "code": "REASONING_FAILED", "content": "深度推理服务超时"}`
+
+#### 前端实现指引
+- **UI 布局**: 建议采用双层布局。上层为“最终答案区”，下层为可折叠的“思考过程区”。
+- **流式更新**:
+  - 收到 `quick_answer` 时，更新“最终答案区”。
+  - 收到 `enhanced_answer` 第一帧时，**清空**“最终答案区”的 Quick Answer 内容，开始重新渲染 Enhanced Answer。
+  - 收到 `reasoning_content` 时，追加到“思考过程区”。
 
 ## 4. MCP 服务调用与前端展示规范
 (保持原有内容不变...)

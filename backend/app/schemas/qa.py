@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     model: Optional[str] = Field("deepseek", description="Model to use: deepseek, gpt-4o")
     prompt_style: Optional[str] = Field("default", description="Prompt style: default, creative, socratic")
     video_timestamp: Optional[float] = Field(None, description="Current video playback timestamp in seconds for resume anchor")
+    enable_reasoning: bool = Field(False, description="Enable dual-stream reasoning (Quick Answer + Deep Thinking)")
 
 class SourceNode(BaseModel):
     node_id: str
