@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.core.config import settings
-from backend.app.api.v1 import chat, student
+from backend.app.api.v1 import chat, student, parser
 from backend.app.api.v1.ws_script import router as ws_router
 from backend.app.core.logging_config import setup_logging
 
@@ -27,6 +27,7 @@ def get_application() -> FastAPI:
     # Include Routers
     application.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
     application.include_router(student.router, prefix="/api/v1/student", tags=["student"])
+    application.include_router(parser.router, prefix="/api/v1", tags=["parser"])
     application.include_router(ws_router, prefix="/api/v1", tags=["script"])
     return application
 
