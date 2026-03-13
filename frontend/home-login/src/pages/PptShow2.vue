@@ -61,188 +61,116 @@
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
           <input type="text" class="search-input" placeholder="搜索PPT..." v-model="searchQuery" @input="handleSearch">
+          <div class="expand-menu-container">
+            <button class="expand-button" aria-label="扩展功能" @click="toggleExpandMenu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="1"></circle>
+                <circle cx="19" cy="12" r="1"></circle>
+                <circle cx="5" cy="12" r="1"></circle>
+              </svg>
+            </button>
+            <div class="expand-menu" :class="{ 'visible': showExpandMenu }">
+              <div class="menu-item" @click="showAddCoursePopup = true">添加课程</div>
+              <div class="menu-item" @click="deleteMode = !deleteMode; selectedCourseForDelete = ''; showDeleteConfirmPopup = false">删除课程</div>
+            </div>
+          </div>
         </div>
       </div>
       
       <!-- 折叠面板系统 -->
       <div class="accordion-container">
-        <!-- 理科面板 -->
-        <div class="accordion-item">
-          <div class="accordion-header" @click="toggleAccordion('science')">
-            <h3 class="accordion-title">高等数学</h3>
-            <div class="accordion-actions">
-              <button class="add-chapter-button" @click.stop="handleAddChapter('science')" aria-label="添加章节">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
+        <!-- 动态渲染课程面板 -->
+        <div 
+          v-for="(chapters, courseId) in chapterList" 
+          :key="courseId"
+          class="accordion-item"
+        >
+          <div class="accordion-header" @click="toggleAccordion(courseId)">
+            <div class="accordion-title-container">
+              <button v-if="deleteMode" class="delete-course-button" :class="{ 'active': selectedCourseForDelete === courseId }" @click.stop="handleDeleteCourseClick(courseId)">
+                <svg class="delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
                 </svg>
               </button>
-              <button class="delete-chapter-button" @click.stop="isDeleteMode = !isDeleteMode" :class="{ active: isDeleteMode }" aria-label="删除章节">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  <line x1="10" y1="11" x2="10" y2="17"></line>
-                  <line x1="14" y1="11" x2="14" y2="17"></line>
-                </svg>
-              </button>
-              <svg class="accordion-icon" :class="{ 'rotated': expandedAccordion === 'science' }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
+              <h3 class="accordion-title">{{ getCourseName(courseId) }}</h3>
             </div>
-          </div>
-          <div class="accordion-content" :class="{ 'expanded': expandedAccordion === 'science' }">
-            <!-- 子折叠面板 -->
-            <div class="sub-accordion-container">
-              <!-- 动态渲染章节 -->
-              <div 
-                v-for="(chapter, index) in chapterList.science" 
-                :key="`science-chapter-${index}`"
-                class="sub-accordion-item"
-              >
-                <div class="sub-accordion-header" @click="toggleSubAccordion('science', `chapter${index + 1}`)">
-                  <h4 class="sub-accordion-title">{{ chapter }}</h4>
-                  <div class="sub-accordion-actions">
-                    <button v-if="isDeleteMode" class="delete-chapter-icon" @click.stop="deleteChapter('science', index)" aria-label="删除章节">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                      </svg>
-                    </button>
-                    <svg class="sub-accordion-icon" :class="{ 'rotated': expandedSubAccordion.science === `chapter${index + 1}` }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                  </div>
-                </div>
-                <div class="sub-accordion-content" :class="{ 'expanded': expandedSubAccordion.science === `chapter${index + 1}` }">
-                  <div class="card-scroll-container">
-                    <!-- 添加PPT卡片 -->
-                    <div class="card new-card" @click="handleNewPPT">
-                      <div class="new-card-content">
-                        <div class="plus-button">
-                          +
-                        </div>
-                        <p class="new-card-text">添加PPT或图片</p>
-                      </div>
-                    </div>
-                    
-                    <!-- 章节PPT卡片 -->
-                    <div 
-                      v-for="(ppt, pptIndex) in filteredPptList('science', `chapter${index + 1}`)" 
-                      :key="ppt.id"
-                      class="card ppt-card"
-                      @click="handlePptClick(ppt.id)"
-                      @mouseenter="handlePptHover(pptIndex, true)"
-                      @mouseleave="handlePptHover(pptIndex, false)"
-                    >
-                      <!-- 标题栏 -->
-                      <div class="card-header">
-                        <h3 class="card-title">{{ ppt.title }}</h3>
-                        <span class="card-date">{{ ppt.lastEdited }}</span>
-                      </div>
-                      
-                      <!-- 封面图区域 -->
-                      <div class="card-cover" :class="{ hovered: hoveredPptIndex === pptIndex }">
-                        <img :src="ppt.cover" alt="PPT封面" class="cover-image" />
-                      </div>
-                      
-                      <!-- 五角星按钮 -->
-                      <button 
-                        class="star-button" 
-                        :class="{ active: ppt.isFavorite }"
-                        @click.stop="toggleFavorite(ppt.id)"
-                        aria-label="收藏"
-                      >
-                        ★
-                      </button>
-                      
-                      <!-- 删除PPT按钮 -->
-                      <button v-if="isDeleteMode" class="delete-ppt-icon" @click.stop="deletePPT(ppt.id)" aria-label="删除PPT">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18"></line>
-                          <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                      </button>
-                      
-                      <!-- 简介面板 -->
-                      <div class="card-description" :class="{ visible: hoveredPptIndex === pptIndex }">
-                        <p>{{ ppt.description }}</p>
-                      </div>
-                    </div>
-                  </div>
+            <div class="accordion-actions">
+              <div class="expand-menu-container">
+                <button class="expand-icon-button" aria-label="扩展功能" @click.stop="toggleAccordionMenu(courseId)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="1"></circle>
+                    <circle cx="19" cy="12" r="1"></circle>
+                    <circle cx="5" cy="12" r="1"></circle>
+                  </svg>
+                </button>
+                <div class="expand-menu" :class="{ 'visible': accordionMenuVisible === courseId }">
+                  <div class="menu-item" @click.stop="showDeleteConfirmPopup = false; deleteChapterMode = !deleteChapterMode; currentDeleteChapterCourse = deleteChapterMode ? courseId : ''; selectedChapterForDelete = null">删除章节</div>
+                  <div class="menu-item" @click.stop="showAddChapterPopup = true; currentCategory = courseId">添加章节</div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- 文科面板 -->
-        <div class="accordion-item">
-          <div class="accordion-header" @click="toggleAccordion('arts')">
-            <h3 class="accordion-title">大学物理</h3>
-            <div class="accordion-actions">
-              <button class="add-chapter-button" @click.stop="handleAddChapter('arts')" aria-label="添加章节">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-              </button>
-              <button class="delete-chapter-button" @click.stop="isDeleteMode = !isDeleteMode" :class="{ active: isDeleteMode }" aria-label="删除章节">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  <line x1="10" y1="11" x2="10" y2="17"></line>
-                  <line x1="14" y1="11" x2="14" y2="17"></line>
-                </svg>
-              </button>
-              <svg class="accordion-icon" :class="{ 'rotated': expandedAccordion === 'arts' }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg class="accordion-icon" :class="{ 'rotated': expandedAccordion === courseId }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
             </div>
           </div>
-          <div class="accordion-content" :class="{ 'expanded': expandedAccordion === 'arts' }">
+          <div class="accordion-content" :class="{ 'expanded': expandedAccordion === courseId }">
             <!-- 子折叠面板 -->
             <div class="sub-accordion-container">
               <!-- 动态渲染章节 -->
               <div 
-                v-for="(chapter, index) in chapterList.arts" 
-                :key="`arts-chapter-${index}`"
+                v-for="(chapter, index) in chapters" 
+                :key="`${courseId}-chapter-${index}`"
                 class="sub-accordion-item"
               >
-                <div class="sub-accordion-header" @click="toggleSubAccordion('arts', `chapter${index + 1}`)">
-                  <h4 class="sub-accordion-title">{{ chapter }}</h4>
-                  <div class="sub-accordion-actions">
-                    <button v-if="isDeleteMode" class="delete-chapter-icon" @click.stop="deleteChapter('arts', index)" aria-label="删除章节">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <div class="sub-accordion-header" @click="toggleSubAccordion(courseId, `chapter${index + 1}`)">
+                  <div class="sub-accordion-title-container">
+                    <button v-if="deleteChapterMode && currentDeleteChapterCourse === courseId" class="delete-chapter-button" :class="{ 'active': selectedChapterForDelete && selectedChapterForDelete.courseId === courseId && selectedChapterForDelete.chapterIndex === index }" @click.stop="handleDeleteChapterClick(courseId, index)">
+                      <svg class="delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                       </svg>
                     </button>
-                    <svg class="sub-accordion-icon" :class="{ 'rotated': expandedSubAccordion.arts === `chapter${index + 1}` }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <h4 class="sub-accordion-title">{{ chapter }}</h4>
+                  </div>
+                  <div class="sub-accordion-actions">
+                    <div class="expand-menu-container">
+                      <button class="expand-icon-button" aria-label="扩展功能" @click.stop="toggleChapterMenu(courseId, index)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="12" cy="12" r="1"></circle>
+                          <circle cx="19" cy="12" r="1"></circle>
+                          <circle cx="5" cy="12" r="1"></circle>
+                        </svg>
+                      </button>
+                      <div class="expand-menu" :class="{ 'visible': chapterMenuVisible === `${courseId}-${index}` }">
+                        <div class="menu-item" @click.stop="handleAddPPT(courseId, index)">添加PPT</div>
+                        <div class="menu-item" @click.stop="showDeleteConfirmPopup = false; deletePPTMode = !deletePPTMode; currentDeletePPTCourse = deletePPTMode ? courseId : ''; selectedPPTForDelete = null">删除PPT</div>
+                      </div>
+                    </div>
+                    <svg class="sub-accordion-icon" :class="{ 'rotated': expandedSubAccordion[courseId] === `chapter${index + 1}` }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                   </div>
                 </div>
-                <div class="sub-accordion-content" :class="{ 'expanded': expandedSubAccordion.arts === `chapter${index + 1}` }">
+                <div class="sub-accordion-content" :class="{ 'expanded': expandedSubAccordion[courseId] === `chapter${index + 1}` }">
                   <div class="card-scroll-container">
-                    <!-- 添加PPT卡片 -->
-                    <div class="card new-card" @click="handleNewPPT">
-                      <div class="new-card-content">
-                        <div class="plus-button">
-                          +
-                        </div>
-                        <p class="new-card-text">添加PPT或图片</p>
-                      </div>
-                    </div>
-                    
                     <!-- 章节PPT卡片 -->
                     <div 
-                      v-for="(ppt, pptIndex) in filteredPptList('arts', `chapter${index + 1}`)" 
+                      v-for="(ppt, pptIndex) in filteredPptList(courseId, `chapter${index + 1}`)" 
                       :key="ppt.id"
                       class="card ppt-card"
                       @click="handlePptClick(ppt.id)"
                       @mouseenter="handlePptHover(pptIndex, true)"
                       @mouseleave="handlePptHover(pptIndex, false)"
                     >
+                      <!-- 删除PPT按钮 -->
+                      <button v-if="deletePPTMode && currentDeletePPTCourse === courseId" class="delete-ppt-button" :class="{ 'active': selectedPPTForDelete === ppt.id }" @click.stop="handleDeletePTPClick(ppt.id)">
+                        <svg class="delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      </button>
+                      
                       <!-- 标题栏 -->
                       <div class="card-header">
                         <h3 class="card-title">{{ ppt.title }}</h3>
@@ -262,123 +190,6 @@
                         aria-label="收藏"
                       >
                         ★
-                      </button>
-                      
-                      <!-- 删除PPT按钮 -->
-                      <button v-if="isDeleteMode" class="delete-ppt-icon" @click.stop="deletePPT(ppt.id)" aria-label="删除PPT">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18"></line>
-                          <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                      </button>
-                      
-                      <!-- 简介面板 -->
-                      <div class="card-description" :class="{ visible: hoveredPptIndex === pptIndex }">
-                        <p>{{ ppt.description }}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- 工科面板 -->
-        <div class="accordion-item">
-          <div class="accordion-header" @click="toggleAccordion('engineering')">
-            <h3 class="accordion-title">大学英语</h3>
-            <div class="accordion-actions">
-              <button class="add-chapter-button" @click.stop="handleAddChapter('engineering')" aria-label="添加章节">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-              </button>
-              <button class="delete-chapter-button" @click.stop="isDeleteMode = !isDeleteMode" :class="{ active: isDeleteMode }" aria-label="删除章节">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  <line x1="10" y1="11" x2="10" y2="17"></line>
-                  <line x1="14" y1="11" x2="14" y2="17"></line>
-                </svg>
-              </button>
-              <svg class="accordion-icon" :class="{ 'rotated': expandedAccordion === 'engineering' }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
-          <div class="accordion-content" :class="{ 'expanded': expandedAccordion === 'engineering' }">
-            <!-- 子折叠面板 -->
-            <div class="sub-accordion-container">
-              <!-- 动态渲染章节 -->
-              <div 
-                v-for="(chapter, index) in chapterList.engineering" 
-                :key="`engineering-chapter-${index}`"
-                class="sub-accordion-item"
-              >
-                <div class="sub-accordion-header" @click="toggleSubAccordion('engineering', `chapter${index + 1}`)">
-                  <h4 class="sub-accordion-title">{{ chapter }}</h4>
-                  <div class="sub-accordion-actions">
-                    <button v-if="isDeleteMode" class="delete-chapter-icon" @click.stop="deleteChapter('engineering', index)" aria-label="删除章节">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                      </svg>
-                    </button>
-                    <svg class="sub-accordion-icon" :class="{ 'rotated': expandedSubAccordion.engineering === `chapter${index + 1}` }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                  </div>
-                </div>
-                <div class="sub-accordion-content" :class="{ 'expanded': expandedSubAccordion.engineering === `chapter${index + 1}` }">
-                  <div class="card-scroll-container">
-                    <!-- 添加PPT卡片 -->
-                    <div class="card new-card" @click="handleNewPPT">
-                      <div class="new-card-content">
-                        <div class="plus-button">
-                          +
-                        </div>
-                        <p class="new-card-text">添加PPT或图片</p>
-                      </div>
-                    </div>
-                    
-                    <!-- 章节PPT卡片 -->
-                    <div 
-                      v-for="(ppt, pptIndex) in filteredPptList('engineering', `chapter${index + 1}`)" 
-                      :key="ppt.id"
-                      class="card ppt-card"
-                      @click="handlePptClick(ppt.id)"
-                      @mouseenter="handlePptHover(pptIndex, true)"
-                      @mouseleave="handlePptHover(pptIndex, false)"
-                    >
-                      <!-- 标题栏 -->
-                      <div class="card-header">
-                        <h3 class="card-title">{{ ppt.title }}</h3>
-                        <span class="card-date">{{ ppt.lastEdited }}</span>
-                      </div>
-                      
-                      <!-- 封面图区域 -->
-                      <div class="card-cover" :class="{ hovered: hoveredPptIndex === pptIndex }">
-                        <img :src="ppt.cover" alt="PPT封面" class="cover-image" />
-                      </div>
-                      
-                      <!-- 五角星按钮 -->
-                      <button 
-                        class="star-button" 
-                        :class="{ active: ppt.isFavorite }"
-                        @click.stop="toggleFavorite(ppt.id)"
-                        aria-label="收藏"
-                      >
-                        ★
-                      </button>
-                      
-                      <!-- 删除PPT按钮 -->
-                      <button v-if="isDeleteMode" class="delete-ppt-icon" @click.stop="deletePPT(ppt.id)" aria-label="删除PPT">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18"></line>
-                          <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
                       </button>
                       
                       <!-- 简介面板 -->
@@ -394,38 +205,99 @@
         </div>
       </div>
     </div>
-    
-    <!-- 添加PPT弹窗 -->
-    <AddPPTPopup 
-      v-if="showAddPPTPopup" 
-      @close="showAddPPTPopup = false"
-      @success="handleAddPPTSuccess"
+
+    <!-- 添加课程弹窗 -->
+    <AddItemPopup
+      v-if="showAddCoursePopup"
+      title="添加课程"
+      inputLabel="课程名称"
+      inputPlaceholder="请输入课程名称"
+      confirmTitle="确认创建课程"
+      loadingText="创建课程中..."
+      successMessage="课程创建成功！"
+      @close="showAddCoursePopup = false"
+      @success="handleCourseAdded"
     />
-    
+
     <!-- 添加章节弹窗 -->
-    <AddChaptPopup 
-      v-if="showAddChaptPopup" 
-      @close="handleCloseAddChaptPopup"
-      @success="handleAddChapterSuccess"
+    <AddItemPopup
+      v-if="showAddChapterPopup"
+      title="添加章节"
+      inputLabel="章节名称"
+      inputPlaceholder="请输入章节名称"
+      confirmTitle="确认创建章节"
+      loadingText="创建章节中..."
+      successMessage="章节创建成功！"
+      @close="showAddChapterPopup = false"
+      @success="handleChapterAdded"
     />
+
+    <!-- 添加PPT弹窗 -->
+    <AddPPTPopup
+      v-if="showAddPPTPopup"
+      title="添加PPT"
+      confirmTitle="确认添加PPT"
+      loadingText="上传中..."
+      successMessage="PPT添加成功！"
+      @close="showAddPPTPopup = false"
+      @success="handlePPTAdded"
+    />
+
+    <!-- 确认删除弹窗 -->
+    <div v-if="showDeleteConfirmPopup" class="delete-confirm-popup" @click.self="handleCancelDelete">
+      <div class="popup-content">
+        <div class="popup-header">
+          <h2 class="popup-title">确认删除</h2>
+          <button class="close-button" @click="handleCancelDelete">
+            <svg class="close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="popup-body">
+          <p class="confirm-message">{{ selectedCourseForDelete ? '确认删除该课程吗？' : selectedChapterForDelete ? '确认删除该章节吗？' : '确认删除该PPT吗？' }}</p>
+        </div>
+        <div class="popup-footer">
+          <button class="cancel-button" @click="handleCancelDelete">取消</button>
+          <button class="confirm-button delete" @click="handleConfirmDelete">确认</button>
+        </div>
+      </div>
+    </div>
+
+
+
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import AddPPTPopup from '../components/AddPPTPopup.vue'
-import AddChaptPopup from '../components/AddChaptPopup.vue'
+import AddItemPopup from '@/components/AddItemPopup.vue'
+import AddPPTPopup from '@/components/AddPPTPopup.vue'
 
 // 状态
-const showAddPPTPopup = ref(false)
-const showAddChaptPopup = ref(false)
 const hoveredPptIndex = ref(-1)
 const showUserMenu = ref(false)
-const isDeleteMode = ref(false)
+const showExpandMenu = ref(false)
+const accordionMenuVisible = ref('')
+const chapterMenuVisible = ref('')
+const deleteMode = ref(false)
+const deleteChapterMode = ref(false)
+const currentDeleteChapterCourse = ref('')
+const deletePPTMode = ref(false)
+const currentDeletePPTCourse = ref('')
+const selectedCourseForDelete = ref('')
+const selectedChapterForDelete = ref(null)
+const selectedPPTForDelete = ref(null)
+const showDeleteConfirmPopup = ref(false)
 let hoverTimer = null
 
-// 当前操作的课程分类
+// 弹窗状态
+const showAddCoursePopup = ref(false)
+const showAddChapterPopup = ref(false)
+const showAddPPTPopup = ref(false)
 const currentCategory = ref('')
+const currentChapter = ref('')
 
 // 背景元素引用
 const bgGradient = ref(null)
@@ -433,6 +305,13 @@ const bgGradient = ref(null)
 // 折叠面板状态
 const expandedAccordion = ref('science') // 默认展开理科面板
 const expandedSubAccordion = ref({}) // 子折叠面板状态
+
+// 课程名称映射
+const courseNames = ref({
+  science: '高等数学',
+  arts: '大学物理',
+  engineering: '大学英语'
+})
 
 // 章节列表
 const chapterList = ref({
@@ -485,6 +364,12 @@ onMounted(() => {
     expandedAccordion.value = savedAccordion
   }
   
+  // 从本地存储加载课程名称
+  const savedCourseNames = localStorage.getItem('courseNames')
+  if (savedCourseNames) {
+    courseNames.value = JSON.parse(savedCourseNames)
+  }
+  
   // 从本地存储加载章节列表
   const savedChapters = localStorage.getItem('chapterList')
   if (savedChapters) {
@@ -517,68 +402,7 @@ const toggleSubAccordion = (parent, child) => {
   }
 }
 
-// 处理添加章节
-const handleAddChapter = (category) => {
-  currentCategory.value = category
-  showAddChaptPopup.value = true
-}
 
-// 处理添加章节成功
-const handleAddChapterSuccess = (chapterName) => {
-  console.log('添加章节成功:', chapterName, '到', currentCategory.value)
-  
-  // 添加新章节到对应分类
-  if (currentCategory.value && chapterList.value[currentCategory.value]) {
-    chapterList.value[currentCategory.value].push(chapterName)
-    
-    // 保存章节列表到本地存储，模拟数据库存储
-    localStorage.setItem('chapterList', JSON.stringify(chapterList.value))
-    
-    // 展开对应分类的折叠面板
-    expandedAccordion.value = currentCategory.value
-  }
-  
-  showAddChaptPopup.value = false
-}
-
-// 删除章节
-const deleteChapter = (category, index) => {
-  if (chapterList.value[category] && chapterList.value[category][index]) {
-    // 确认删除
-    if (confirm(`确定要删除章节 "${chapterList.value[category][index]}" 吗？`)) {
-      // 从章节列表中删除
-      chapterList.value[category].splice(index, 1)
-      
-      // 保存章节列表到本地存储
-      localStorage.setItem('chapterList', JSON.stringify(chapterList.value))
-      
-      // 如果删除的是当前展开的章节，关闭展开状态
-      if (expandedSubAccordion.value[category] === `chapter${index + 1}`) {
-        expandedSubAccordion.value[category] = ''
-      }
-    }
-  }
-}
-
-// 删除PPT
-const deletePPT = (pptId) => {
-  // 确认删除
-  if (confirm('确定要删除这个PPT吗？')) {
-    // 从PPT列表中删除
-    const index = pptList.value.findIndex(ppt => ppt.id === pptId)
-    if (index !== -1) {
-      pptList.value.splice(index, 1)
-      
-      // 保存收藏状态到本地存储
-      saveFavorites()
-    }
-  }
-}
-
-// 关闭添加章节弹窗
-const handleCloseAddChaptPopup = () => {
-  showAddChaptPopup.value = false
-}
 
 // 处理搜索
 const handleSearch = () => {
@@ -710,12 +534,6 @@ const handleBack = () => {
   window.history.back()
 }
 
-// 处理添加PPT成功
-const handleAddPPTSuccess = () => {
-  console.log('添加PPT成功')
-  // 这里可以添加成功后的处理逻辑
-}
-
 // 处理PPT悬停
 const handlePptHover = (index, isHovering) => {
   // 清除之前的定时器
@@ -740,13 +558,8 @@ const handlePptHover = (index, isHovering) => {
 // 处理PPT点击
 const handlePptClick = (id) => {
   console.log('点击PPT:', id)
-  // 跳转到PptTeach2页面
+  // 直接跳转到PptTeach2页面
   window.location.href = '/ppt-teach2'
-}
-
-// 处理添加PPT
-const handleNewPPT = () => {
-  showAddPPTPopup.value = true
 }
 
 // 切换收藏状态
@@ -831,11 +644,199 @@ const handleLogout = () => {
   showUserMenu.value = false
 }
 
+// 切换扩展菜单显示/隐藏
+const toggleExpandMenu = () => {
+  showExpandMenu.value = !showExpandMenu.value
+}
+
+// 切换课程扩展菜单显示/隐藏
+const toggleAccordionMenu = (category) => {
+  // 如果标题栏处于收起状态，先展开标题栏
+  if (expandedAccordion.value !== category) {
+    toggleAccordion(category)
+  }
+  
+  // 然后显示/隐藏扩展菜单
+  if (accordionMenuVisible.value === category) {
+    accordionMenuVisible.value = ''
+  } else {
+    accordionMenuVisible.value = category
+  }
+}
+
+// 处理添加课程
+const handleAddChapter = (category) => {
+  console.log('添加课程到', category)
+  accordionMenuVisible.value = ''
+  // 这里可以添加添加课程的逻辑
+}
+
+// 处理重命名章节
+const handleRenameChapter = (courseId, chapterIndex) => {
+  console.log('重命名章节', chapterIndex, '在课程', courseId)
+  chapterMenuVisible.value = ''
+  // 这里可以添加重命名章节的逻辑
+  // 例如，打开重命名弹窗，获取新名称，更新章节列表
+}
+
+// 处理删除章节
+const handleDeleteChapter = (courseId, chapterIndex) => {
+  console.log('删除章节', chapterIndex, '在课程', courseId)
+  chapterMenuVisible.value = ''
+  // 这里可以添加删除章节的逻辑
+  // 例如，显示确认对话框，确认后从章节列表中删除
+  if (confirm('确定要删除这个章节吗？')) {
+    if (chapterList.value[courseId]) {
+      chapterList.value[courseId].splice(chapterIndex, 1)
+      // 保存到本地存储
+      localStorage.setItem('chapterList', JSON.stringify(chapterList.value))
+    }
+  }
+}
+
+// 处理删除课程的点击事件
+const handleDeleteCourseClick = (courseId) => {
+  selectedCourseForDelete.value = courseId
+  showDeleteConfirmPopup.value = true
+}
+
+// 处理删除章节的点击事件
+const handleDeleteChapterClick = (courseId, chapterIndex) => {
+  selectedChapterForDelete.value = { courseId, chapterIndex }
+  showDeleteConfirmPopup.value = true
+}
+
+// 处理删除PPT的点击事件
+const handleDeletePTPClick = (pptId) => {
+  selectedPPTForDelete.value = pptId
+  showDeleteConfirmPopup.value = true
+}
+
+// 处理确认删除
+const handleConfirmDelete = () => {
+  if (selectedCourseForDelete.value) {
+    // 删除课程
+    delete chapterList.value[selectedCourseForDelete.value]
+    delete courseNames.value[selectedCourseForDelete.value]
+    // 保存到本地存储
+    localStorage.setItem('chapterList', JSON.stringify(chapterList.value))
+    localStorage.setItem('courseNames', JSON.stringify(courseNames.value))
+    // 关闭弹窗
+    showDeleteConfirmPopup.value = false
+    // 退出删除模式
+    deleteMode.value = false
+    selectedCourseForDelete.value = ''
+  } else if (selectedChapterForDelete.value) {
+    // 删除章节
+    const { courseId, chapterIndex } = selectedChapterForDelete.value
+    if (chapterList.value[courseId]) {
+      chapterList.value[courseId].splice(chapterIndex, 1)
+      // 保存到本地存储
+      localStorage.setItem('chapterList', JSON.stringify(chapterList.value))
+    }
+    // 关闭弹窗
+    showDeleteConfirmPopup.value = false
+    // 退出删除模式
+    deleteChapterMode.value = false
+    selectedChapterForDelete.value = null
+  } else if (selectedPPTForDelete.value) {
+    // 删除PPT
+    const pptIndex = pptList.value.findIndex(ppt => ppt.id === selectedPPTForDelete.value)
+    if (pptIndex !== -1) {
+      pptList.value.splice(pptIndex, 1)
+      // 保存到本地存储
+      saveFavorites()
+    }
+    // 关闭弹窗
+    showDeleteConfirmPopup.value = false
+    // 退出删除模式
+    deletePPTMode.value = false
+    selectedPPTForDelete.value = null
+  }
+}
+
+// 处理取消删除
+const handleCancelDelete = () => {
+  showDeleteConfirmPopup.value = false
+  selectedCourseForDelete.value = ''
+  selectedChapterForDelete.value = null
+  selectedPPTForDelete.value = null
+  deleteChapterMode.value = false
+  currentDeleteChapterCourse.value = ''
+  deletePPTMode.value = false
+  currentDeletePPTCourse.value = ''
+}
+
+// 获取课程名称
+const getCourseName = (courseId) => {
+  return courseNames.value[courseId] || courseId
+}
+
+// 处理课程添加成功
+const handleCourseAdded = (courseName) => {
+  console.log('课程添加成功:', courseName)
+  // 生成唯一的课程ID
+  const courseId = 'course_' + Date.now()
+  // 添加到章节列表 - 空数组，不包含默认章节
+  chapterList.value[courseId] = []
+  // 存储课程名称
+  courseNames.value[courseId] = courseName
+  // 保存到本地存储
+  localStorage.setItem('chapterList', JSON.stringify(chapterList.value))
+  localStorage.setItem('courseNames', JSON.stringify(courseNames.value))
+  // 展开新添加的课程
+  expandedAccordion.value = courseId
+}
+
+// 处理章节添加成功
+const handleChapterAdded = (chapterName) => {
+  console.log('章节添加成功:', chapterName, '到', currentCategory.value)
+  if (currentCategory.value && chapterList.value[currentCategory.value]) {
+    chapterList.value[currentCategory.value].push(chapterName)
+    // 保存到本地存储
+    localStorage.setItem('chapterList', JSON.stringify(chapterList.value))
+  }
+}
+
+// 切换章节菜单显示/隐藏
+const toggleChapterMenu = (courseId, chapterIndex) => {
+  const menuKey = `${courseId}-${chapterIndex}`
+  if (chapterMenuVisible.value === menuKey) {
+    chapterMenuVisible.value = ''
+  } else {
+    chapterMenuVisible.value = menuKey
+    // 同时展开对应章节
+    toggleSubAccordion(courseId, `chapter${chapterIndex + 1}`)
+  }
+}
+
+// 处理添加PPT
+const handleAddPPT = (courseId, chapterIndex) => {
+  currentCategory.value = courseId
+  currentChapter.value = chapterIndex
+  chapterMenuVisible.value = ''
+  showAddPPTPopup.value = true
+}
+
+// 处理PPT添加成功
+const handlePPTAdded = (pptData) => {
+  console.log('PPT添加成功:', pptData.title, '到章节', currentChapter.value, '课程', currentCategory.value)
+  // 这里可以添加实际的PPT添加逻辑
+  // 例如，将PPT添加到对应章节的PPT列表中
+}
+
 // 点击页面其他区域关闭下拉菜单
 document.addEventListener('click', (e) => {
   const userMenu = document.querySelector('.navbar-user')
   if (userMenu && !userMenu.contains(e.target)) {
     showUserMenu.value = false
+  }
+  
+  const expandMenu = document.querySelector('.expand-menu-container')
+  if (expandMenu && !expandMenu.contains(e.target)) {
+    showExpandMenu.value = false
+    accordionMenuVisible.value = ''
+    chapterMenuVisible.value = ''
   }
 })
 </script>
@@ -1127,7 +1128,11 @@ document.addEventListener('click', (e) => {
 
 .search-container {
   position: relative;
-  width: 300px;
+  width: 250px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 20px;
 }
 
 .search-icon {
@@ -1138,6 +1143,7 @@ document.addEventListener('click', (e) => {
   color: #999;
   width: 16px;
   height: 16px;
+  z-index: 1;
 }
 
 .search-input {
@@ -1156,6 +1162,79 @@ document.addEventListener('click', (e) => {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
 }
 
+/* 扩展功能按钮 */
+.expand-button {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  flex-shrink: 0;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+/* 扩展功能按钮中的SVG */
+.expand-button svg {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+/* 扩展菜单容器 */
+.expand-menu-container {
+  position: relative;
+}
+
+/* 扩展菜单 */
+.expand-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid #EEEEEE;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 150px;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+  opacity: 0;
+  z-index: 1000;
+}
+
+.expand-menu.visible {
+  max-height: 150px;
+  opacity: 1;
+}
+
+/* 菜单项 */
+.expand-menu .menu-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #333333;
+}
+
+.expand-menu .menu-item:hover {
+  background: rgba(50, 133, 250, 0.1);
+  color: #3285FA;
+}
+
+.expand-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
 /* 折叠面板容器 */
 .accordion-container {
   display: flex;
@@ -1167,10 +1246,10 @@ document.addEventListener('click', (e) => {
 .accordion-item {
   background: rgba(255, 255, 255, 0.9);
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(12px);
   border: 1px solid #E0E8FF;
+  position: relative;
 }
 
 /* 折叠面板头部 */
@@ -1184,13 +1263,114 @@ document.addEventListener('click', (e) => {
   transition: all 0.3s ease;
 }
 
+/* 课程标题容器 */
+.accordion-title-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 删除课程按钮 */
+.delete-course-button {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  border-radius: 50%;
+}
+
+.delete-course-button:hover {
+  color: rgba(255, 255, 255, 1);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.delete-course-button.active {
+  color: #ff4757;
+  background: rgba(255, 71, 87, 0.2);
+}
+
+/* 章节标题容器 */
+.sub-accordion-title-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 删除章节按钮 */
+.delete-chapter-button {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  border-radius: 50%;
+}
+
+.delete-chapter-button:hover {
+  color: rgba(255, 255, 255, 1);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.delete-chapter-button.active {
+  color: #ff4757;
+  background: rgba(255, 71, 87, 0.2);
+}
+
+/* 删除PPT按钮 */
+.delete-ppt-button {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: rgba(255, 255, 255, 0.7);
+  color: #333;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  border-radius: 50%;
+  z-index: 5;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.delete-ppt-button:hover {
+  background: rgba(255, 255, 255, 1);
+  color: #3285FA;
+  transform: scale(1.1);
+}
+
+.delete-ppt-button.active {
+  background: rgba(255, 71, 87, 0.2);
+  color: #ff4757;
+}
+
+.delete-icon {
+  width: 14px;
+  height: 14px;
+}
+
 .accordion-actions {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.add-chapter-button {
+/* 扩展图标按钮 */
+.expand-icon-button {
   width: 32px;
   height: 32px;
   border: none;
@@ -1204,106 +1384,21 @@ document.addEventListener('click', (e) => {
   transition: all 0.3s ease;
 }
 
-.add-chapter-button:hover {
+.expand-icon-button:hover {
   background: rgba(255, 255, 255, 0.3);
   transform: scale(1.1);
 }
 
-.add-chapter-button svg {
+.expand-icon-button svg {
   width: 16px;
   height: 16px;
-}
-
-/* 删除章节按钮 */
-.delete-chapter-button {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
 }
 
-.delete-chapter-button:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.1);
-}
-
-.delete-chapter-button.active {
-  background: rgba(255, 70, 70, 0.8);
-  color: white;
-}
-
-.delete-chapter-button svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* 子折叠面板操作区 */
 .sub-accordion-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-/* 删除章节图标 */
-.delete-chapter-icon {
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: rgba(255, 70, 70, 0.8);
-  border-radius: 50%;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-  margin-right: 8px;
-}
-
-.delete-chapter-icon:hover {
-  background: rgba(255, 70, 70, 1);
-  transform: scale(1.1);
-}
-
-.delete-chapter-icon svg {
-  width: 12px;
-  height: 12px;
-}
-
-/* 删除PPT图标 */
-.delete-ppt-icon {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: rgba(255, 70, 70, 0.8);
-  border-radius: 50%;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-  z-index: 5;
-}
-
-.delete-ppt-icon:hover {
-  background: rgba(255, 70, 70, 1);
-  transform: scale(1.1);
-}
-
-.delete-ppt-icon svg {
-  width: 14px;
-  height: 14px;
 }
 
 .accordion-header:hover {
@@ -1336,7 +1431,7 @@ document.addEventListener('click', (e) => {
 }
 
 .accordion-content.expanded {
-  max-height: 800px;
+  max-height: 2400px;
   transition: max-height 0.5s ease-in;
 }
 
@@ -1398,7 +1493,7 @@ document.addEventListener('click', (e) => {
 }
 
 .sub-accordion-content.expanded {
-  max-height: 400px;
+  max-height: 3600px;
   transition: max-height 0.5s ease-in;
 }
 
@@ -1445,47 +1540,7 @@ document.addEventListener('click', (e) => {
   box-sizing: border-box;
 }
 
-/* 新建卡片 */
-.new-card {
-  background: #E7F3FF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 220px;
-  cursor: pointer;
-}
 
-.new-card-content {
-  text-align: center;
-  padding: 2rem;
-}
-
-.plus-button {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: #3285FA;
-  color: white;
-  font-size: 2rem;
-  font-weight: 300;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 1rem;
-  transition: all 0.2s ease;
-}
-
-.plus-button:hover {
-  transform: scale(1.1);
-  background: #2563EB;
-}
-
-.new-card-text {
-  color: #333;
-  font-size: 1rem;
-  font-weight: 500;
-  margin: 0;
-}
 
 /* PPT卡片 */
 .ppt-card {
@@ -1723,6 +1778,171 @@ document.addEventListener('click', (e) => {
   
   .accordion-icon.rotated {
     transform: none;
+  }
+}
+
+/* 确认删除弹窗 */
+.delete-confirm-popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+
+/* 弹窗内容 */
+.delete-confirm-popup .popup-content {
+  position: relative;
+  width: 90%;
+  max-width: 400px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(24px);
+  border-radius: 20px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  animation: slideIn 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 弹窗头部 */
+.delete-confirm-popup .popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background: #3285FA;
+}
+
+.delete-confirm-popup .popup-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+}
+
+.delete-confirm-popup .close-button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.delete-confirm-popup .close-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.delete-confirm-popup .close-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* 内容区域 */
+.delete-confirm-popup .popup-body {
+  padding: 2rem;
+}
+
+.delete-confirm-popup .confirm-message {
+  font-size: 1rem;
+  color: #333;
+  margin: 0;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* 底部操作区 */
+.delete-confirm-popup .popup-footer {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.5rem 2rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+}
+
+.delete-confirm-popup .cancel-button {
+  padding: 0.75rem 1.5rem;
+  background: white;
+  color: #3285FA;
+  border: 2px solid #3285FA;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.delete-confirm-popup .cancel-button:hover {
+  background: rgba(50, 133, 250, 0.05);
+  transform: translateY(-1px);
+}
+
+.delete-confirm-popup .confirm-button {
+  padding: 0.75rem 1.5rem;
+  background: #3285FA;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(50, 133, 250, 0.3);
+}
+
+.delete-confirm-popup .confirm-button:hover {
+  background: #2563EB;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(50, 133, 250, 0.4);
+}
+
+.delete-confirm-popup .confirm-button.delete {
+  background: #ff4757;
+  box-shadow: 0 2px 8px rgba(255, 71, 87, 0.3);
+}
+
+.delete-confirm-popup .confirm-button.delete:hover {
+  background: #e84118;
+  box-shadow: 0 4px 12px rgba(255, 71, 87, 0.4);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .delete-confirm-popup .popup-content {
+    width: 95%;
+  }
+  
+  .delete-confirm-popup .popup-header,
+  .delete-confirm-popup .popup-body,
+  .delete-confirm-popup .popup-footer {
+    padding: 1rem 1.5rem;
+  }
+  
+  .delete-confirm-popup .popup-footer {
+    flex-direction: column;
+  }
+  
+  .delete-confirm-popup .cancel-button,
+  .delete-confirm-popup .confirm-button {
+    width: 100%;
   }
 }
 </style>

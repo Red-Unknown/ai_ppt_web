@@ -24,17 +24,6 @@
         <div class="lesson-panel" :style="{ width: lessonWidth + '%' }">
           <div class="panel-header">
             <h2>教案内容</h2>
-            <button class="state-toggle-button" @click="toggleLessonPanelState" :class="{ active: lessonPanelState }">
-              <svg v-if="lessonPanelState" class="state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-              </svg>
-              <svg v-else class="state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                <line x1="23" y1="9" x2="17" y2="15"></line>
-                <line x1="17" y1="9" x2="23" y2="15"></line>
-              </svg>
-            </button>
           </div>
           <div class="panel-content">
             <div class="lesson-content">
@@ -75,7 +64,37 @@
         <!-- PPT区 -->
         <div class="ppt-panel" :class="{ collapsed: pptCollapsed }" :style="{ width: pptWidth + '%' }">
           <div class="panel-header">
-            <h2>PPT展示</h2>
+            <div class="header-content">
+              <div class="header-top">
+                <h2>PPT展示</h2>
+                <div class="header-buttons">
+                  <button class="zoom-toggle-button" @click="toggleZoom" :class="{ 'active': zoomLevel > 1 }">
+                    <span class="zoom-text">{{ zoomLevel }}x</span>
+                  </button>
+                  <button class="state-toggle-button" @click="toggleLessonPanelState" :class="{ active: lessonPanelState }">
+                    <svg v-if="lessonPanelState" class="state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    </svg>
+                    <svg v-else class="state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                      <line x1="23" y1="9" x2="17" y2="15"></line>
+                      <line x1="17" y1="9" x2="23" y2="15"></line>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="progress-container" v-if="!pptCollapsed">
+                <div class="progress-info">
+                  <span class="slide-info">{{ currentSlide + 1 }} / {{ totalSlides }}</span>
+                  <span class="progress-percentage">{{ progressPercentage }}%</span>
+                </div>
+                <div class="progress-bar" @click="seekToSlide">
+                  <div class="progress-filled" :style="{ width: progressPercentage + '%' }"></div>
+                  <div class="progress-handle" :style="{ left: progressPercentage + '%' }" @mousedown="startDrag" @touchstart="startDragTouch"></div>
+                </div>
+              </div>
+            </div>
             <button class="collapse-button" @click="togglePptPanel">
               <svg class="collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="15 18 9 12 15 6"></polyline>
@@ -89,7 +108,17 @@
             
             <!-- 悬浮提问框 -->
             <div class="question-box" @click="showPresets">
-              <input type="text" placeholder="输入你的问题..." class="question-input" v-model="questionText">
+              <div class="input-container">
+                <input type="text" placeholder="输入你的问题..." class="question-input" v-model="questionText">
+                <button class="voice-button" @click.stop="toggleVoiceInput" :class="{ 'active': isVoiceInputActive }">
+                  <svg class="voice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                  </svg>
+                </button>
+              </div>
               <button class="send-button" @click.stop="sendQuestion">发送</button>
               <!-- 预设问题区域 -->
               <div class="preset-questions" v-if="showPresetQuestions">
@@ -203,6 +232,15 @@ const pptWidth = ref(50)
 const isResizing = ref(false)
 const questionText = ref('')
 const showPresetQuestions = ref(false)
+const zoomLevel = ref(1)
+// 语音输入状态
+const isVoiceInputActive = ref(false)
+let recognition = null
+// PPT进度条状态
+const currentSlide = ref(0)
+const totalSlides = ref(5)
+const progressPercentage = ref(0)
+const isDragging = ref(false)
 // 答疑集弹窗状态
 const anserPopupVisible = ref(false)
 const conversations = ref([])
@@ -256,6 +294,151 @@ const toggleLessonPanelState = () => {
   lessonPanelState.value = !lessonPanelState.value
   // 保存状态到localStorage
   localStorage.setItem('lessonPanelState', lessonPanelState.value.toString())
+}
+
+// 切换倍率
+const toggleZoom = () => {
+  if (zoomLevel.value === 1) {
+    zoomLevel.value = 2
+  } else if (zoomLevel.value === 2) {
+    zoomLevel.value = 3
+  } else {
+    zoomLevel.value = 1
+  }
+}
+
+// 初始化语音识别
+const initVoiceRecognition = () => {
+  if ('webkitSpeechRecognition' in window) {
+    recognition = new webkitSpeechRecognition()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'zh-CN'
+    
+    recognition.onstart = () => {
+      isVoiceInputActive.value = true
+    }
+    
+    recognition.onresult = (event) => {
+      let transcript = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript
+      }
+      questionText.value = transcript
+    }
+    
+    recognition.onerror = (event) => {
+      console.error('语音识别错误:', event.error)
+    }
+    
+    recognition.onend = () => {
+      // 保持isVoiceInputActive状态，只有手动停止时才设为false
+    }
+  }
+}
+
+// 切换语音输入
+const toggleVoiceInput = () => {
+  if (!recognition) {
+    initVoiceRecognition()
+  }
+  
+  if (isVoiceInputActive.value) {
+    recognition.stop()
+    isVoiceInputActive.value = false
+  } else {
+    if (recognition) {
+      recognition.start()
+    } else {
+      alert('您的浏览器不支持语音识别功能')
+    }
+  }
+}
+
+// 计算进度百分比
+const calculateProgress = () => {
+  if (totalSlides.value > 0) {
+    progressPercentage.value = Math.round((currentSlide.value / (totalSlides.value - 1)) * 100 * 100) / 100
+  } else {
+    progressPercentage.value = 0
+  }
+}
+
+// 切换到下一张幻灯片
+const nextSlide = () => {
+  if (currentSlide.value < totalSlides.value - 1) {
+    currentSlide.value++
+    calculateProgress()
+  }
+}
+
+// 切换到上一张幻灯片
+const prevSlide = () => {
+  if (currentSlide.value > 0) {
+    currentSlide.value--
+    calculateProgress()
+  }
+}
+
+// 跳转到指定幻灯片
+const seekToSlide = (event) => {
+  const progressBar = event.currentTarget
+  const rect = progressBar.getBoundingClientRect()
+  const clickPosition = (event.clientX - rect.left) / rect.width
+  const slideIndex = Math.round(clickPosition * (totalSlides.value - 1))
+  currentSlide.value = Math.max(0, Math.min(totalSlides.value - 1, slideIndex))
+  calculateProgress()
+}
+
+// 开始拖拽进度条
+const startDrag = (event) => {
+  isDragging.value = true
+  document.addEventListener('mousemove', dragProgress)
+  document.addEventListener('mouseup', stopDrag)
+  event.preventDefault()
+}
+
+// 开始触摸拖拽
+const startDragTouch = (event) => {
+  isDragging.value = true
+  document.addEventListener('touchmove', dragProgressTouch)
+  document.addEventListener('touchend', stopDrag)
+  event.preventDefault()
+}
+
+// 拖拽进度条
+const dragProgress = (event) => {
+  if (!isDragging.value) return
+  const progressBar = document.querySelector('.progress-bar')
+  if (progressBar) {
+    const rect = progressBar.getBoundingClientRect()
+    const dragPosition = (event.clientX - rect.left) / rect.width
+    const slideIndex = Math.round(dragPosition * (totalSlides.value - 1))
+    currentSlide.value = Math.max(0, Math.min(totalSlides.value - 1, slideIndex))
+    calculateProgress()
+  }
+}
+
+// 触摸拖拽进度条
+const dragProgressTouch = (event) => {
+  if (!isDragging.value) return
+  const progressBar = document.querySelector('.progress-bar')
+  if (progressBar && event.touches.length > 0) {
+    const rect = progressBar.getBoundingClientRect()
+    const dragPosition = (event.touches[0].clientX - rect.left) / rect.width
+    const slideIndex = Math.round(dragPosition * (totalSlides.value - 1))
+    currentSlide.value = Math.max(0, Math.min(totalSlides.value - 1, slideIndex))
+    calculateProgress()
+  }
+}
+
+// 停止拖拽
+const stopDrag = () => {
+  isDragging.value = false
+  document.removeEventListener('mousemove', dragProgress)
+  document.removeEventListener('touchmove', dragProgressTouch)
+  document.removeEventListener('mouseup', stopDrag)
+  document.removeEventListener('touchend', stopDrag)
 }
 
 // 预设问题数据
@@ -651,6 +834,10 @@ const handleClickOutside = (e) => {
 // 挂载时添加全局点击事件监听器
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  // 初始化进度条
+  calculateProgress()
+  // 初始化语音识别
+  initVoiceRecognition()
 })
 
 // 清理事件监听器
@@ -940,7 +1127,23 @@ onUnmounted(() => {
   padding: 12px 16px;
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.header-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .panel-header h2 {
@@ -948,6 +1151,15 @@ onUnmounted(() => {
   font-size: 1rem;
   font-weight: 600;
   color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .collapse-button {
@@ -974,6 +1186,68 @@ onUnmounted(() => {
   height: 16px;
 }
 
+/* PPT进度条 */
+.progress-container {
+  width: 100%;
+  min-width: 0;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.slide-info {
+  font-weight: 500;
+}
+
+.progress-percentage {
+  font-family: monospace;
+}
+
+.progress-bar {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.progress-filled {
+  height: 100%;
+  background: white;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.progress-handle {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.progress-handle:hover {
+  transform: translate(-50%, -50%) scale(1.2);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+}
+
+.progress-bar:hover .progress-handle {
+  opacity: 1;
+}
+
 /* 状态变换按钮 */
 .state-toggle-button {
   width: 32px;
@@ -997,6 +1271,44 @@ onUnmounted(() => {
 .state-toggle-button.active {
   background: #0066FF;
   color: white;
+}
+
+/* 头部按钮容器 */
+.header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 倍率切换按钮 */
+.zoom-toggle-button {
+  width: 60px;
+  height: 32px;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.zoom-toggle-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+.zoom-toggle-button.active {
+  background: #0066FF;
+  color: white;
+}
+
+.zoom-text {
+  transition: all 0.3s ease;
 }
 
 .state-icon {
@@ -1183,13 +1495,67 @@ onUnmounted(() => {
   height: 100%;
 }
 
+.input-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
 .question-input {
   flex: 1;
   border: none;
   outline: none;
-  padding: 8px 0;
+  padding: 8px 40px 8px 0;
   font-size: 0.875rem;
   color: #333;
+}
+
+.voice-button {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.voice-button:hover {
+  background: rgba(50, 131, 253, 0.1);
+  color: #3283FD;
+}
+
+.voice-button.active {
+  background: rgba(50, 131, 253, 0.2);
+  color: #3283FD;
+  animation: pulse 1.5s infinite;
+}
+
+.voice-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* 语音按钮脉冲动画 */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(50, 131, 253, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(50, 131, 253, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(50, 131, 253, 0);
+  }
 }
 
 .question-input::placeholder {

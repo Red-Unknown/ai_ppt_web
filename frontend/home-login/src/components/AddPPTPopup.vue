@@ -1,9 +1,9 @@
 <template>
   <div class="add-ppt-popup" @click.self="$emit('close')">
     <div class="popup-content">
-      <!-- 弹窗标题 -->
+      <!-- 弹窗标题 - 通过props传入 -->
       <div class="popup-header">
-        <h2 class="popup-title">添加PPT</h2>
+        <h2 class="popup-title">{{ title }}</h2>
         <button class="close-button" @click="$emit('close')">
           <svg class="close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -12,132 +12,45 @@
         </button>
       </div>
       
-      <!-- 导航栏 -->
-      <div class="nav-tabs">
-        <button 
-          class="nav-tab" 
-          :class="{ active: activeTab === 'cloud' }"
-          @click="activeTab = 'cloud'"
-        >
-          网盘导入
-        </button>
-        <button 
-          class="nav-tab" 
-          :class="{ active: activeTab === 'local' }"
-          @click="activeTab = 'local'"
-        >
-          本地导入
-        </button>
-      </div>
-      
       <!-- 内容区域 -->
-      <div class="tab-content">
-        <!-- 网盘导入 -->
-        <div v-if="activeTab === 'cloud'" class="cloud-import">
-          <!-- 搜索功能 -->
-          <div class="search-section">
-            <div class="search-box">
-              <span class="search-label">搜索</span>
-              <input 
-                v-model="searchKeyword" 
-                type="text" 
-                class="search-input"
-                placeholder="搜索文件名"
-                @input="handleSearch"
-              />
-              <button class="search-button">
-                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-              </button>
-            </div>
-            
-            <!-- 文件统计信息 -->
-            <div class="file-stats">
-              已选 {{ selectedFiles.length }}个，共 {{ filteredFiles.length }}个
-            </div>
-          </div>
-          
-          <!-- 文件列表 -->
-          <div class="file-list">
-            <div class="file-list-header">
-              <div class="list-header-item checkbox-column">
-                <input 
-                  type="checkbox" 
-                  v-model="selectAll"
-                  @change="handleSelectAll"
-                />
-              </div>
-              <div class="list-header-item name-column">文件名</div>
-              <div class="list-header-item size-column">大小</div>
-              <div class="list-header-item time-column">创建时间</div>
-            </div>
-            
-            <div class="file-list-body">
-              <div 
-                v-for="file in filteredFiles" 
-                :key="file.id"
-                class="file-item"
-              >
-                <div class="file-item-cell checkbox-column">
-                  <input 
-                    type="checkbox" 
-                    :checked="selectedFiles.includes(file.id)"
-                    @change="handleCloudFileSelect(file.id)"
-                  />
-                </div>
-                <div class="file-item-cell name-column">{{ file.name }}</div>
-                <div class="file-item-cell size-column">{{ file.size }}</div>
-                <div class="file-item-cell time-column">{{ file.createTime }}</div>
-              </div>
-              
-              <div v-if="filteredFiles.length === 0" class="empty-state">
-                暂无文件
-              </div>
-            </div>
-          </div>
+      <div class="popup-body">
+        <!-- 输入区域 - 通过props传入标签和占位符 -->
+        <div class="form-group">
+          <label class="form-label" :for="inputId">PPT标题</label>
+          <input 
+            :id="inputId"
+            v-model="pptTitle" 
+            type="text" 
+            class="form-input"
+            placeholder="请输入PPT标题"
+            @input="clearError"
+            @keyup.enter="handleConfirm"
+          />
+          <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
         </div>
         
-        <!-- 本地导入 -->
-        <div v-else-if="activeTab === 'local'" class="local-import">
-          <!-- 文件上传区域 -->
-          <div 
-            class="upload-area"
-            @click="triggerFileInput"
-            @dragover.prevent
-            @drop.prevent="handleFileDrop"
-          >
+        <!-- 文件上传区域 -->
+        <div class="form-group">
+          <label class="form-label">PPT文件</label>
+          <div class="file-upload-container">
             <input 
-              ref="fileInput" 
               type="file" 
-              class="file-input"
-              accept=".pptx,.pdf,.jpg"
-              @change="handleLocalFileSelect"
-            >
-            <div class="upload-content">
-              <div class="upload-icon">+</div>
-              <p class="upload-text">点击或拖拽文件到此处</p>
-            </div>
-          </div>
-          
-          <!-- 上传规则 -->
-          <div class="upload-rules">
-            <h3 class="rules-title">上传规则</h3>
-            <ul class="rules-list">
-              <li class="rule-item">单次限制：单次只能上传1个文件</li>
-              <li class="rule-item">大小限制：文件大小不超过1024M（1GB）</li>
-              <li class="rule-item">支持格式：pptx、pdf、jpg</li>
-            </ul>
-          </div>
-          
-          <!-- 已选择文件 -->
-          <div v-if="localFile" class="selected-file">
-            <h3 class="selected-title">已选择文件</h3>
-            <div class="file-info">
-              <span class="file-name">{{ localFile.name }}</span>
-              <span class="file-size">{{ formatFileSize(localFile.size) }}</span>
-              <button class="remove-file" @click="removeLocalFile">
+              class="file-input" 
+              ref="fileInput"
+              @change="handleFileChange"
+              accept=".ppt,.pptx"
+            />
+            <button type="button" class="file-upload-button" @click="triggerFileInput">
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              {{ selectedFile ? selectedFile.name : '选择PPT文件' }}
+            </button>
+            <div v-if="selectedFile" class="file-info">
+              <span class="file-name">{{ selectedFile.name }}</span>
+              <button type="button" class="remove-file-button" @click="removeFile">
                 <svg class="remove-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18"></line>
                   <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -155,11 +68,44 @@
         </button>
         <button 
           class="confirm-button"
-          :disabled="!canConfirm"
           @click="handleConfirm"
+          :disabled="isLoading"
         >
-          确定
+          {{ isLoading ? loadingText : '确认' }}
         </button>
+      </div>
+      
+      <!-- 确认对话框 - 通过props传入文本 -->
+      <div v-if="showConfirmDialog" class="confirm-dialog-overlay">
+        <div class="confirm-dialog">
+          <h3 class="confirm-title">{{ confirmTitle }}</h3>
+          <p class="confirm-message">{{ confirmMessage }}</p>
+          <div class="confirm-actions">
+            <button class="confirm-cancel" @click="cancelCreateItem">取消</button>
+            <button class="confirm-confirm" @click="confirmCreateItem">确定</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 状态提示 - 通过props传入消息 -->
+      <div v-if="operationStatus" :class="['status-toast', operationStatus]">
+        <div class="status-content">
+          <svg v-if="operationStatus === 'success'" class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <svg v-else class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </svg>
+          <span class="status-text">{{ statusMessage }}</span>
+        </div>
+      </div>
+      
+      <!-- 加载遮罩 - 通过props传入文本 -->
+      <div v-if="isLoading" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">{{ loadingText }}</div>
       </div>
     </div>
   </div>
@@ -168,166 +114,151 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
+// Props
+const props = defineProps({
+  // 弹窗标题
+  title: {
+    type: String,
+    default: '添加PPT'
+  },
+  // 确认对话框标题
+  confirmTitle: {
+    type: String,
+    default: '确认添加PPT'
+  },
+  // 加载文本
+  loadingText: {
+    type: String,
+    default: '上传中...'
+  },
+  // 成功消息
+  successMessage: {
+    type: String,
+    default: 'PPT添加成功！'
+  },
+  // 错误消息
+  errorMessageDefault: {
+    type: String,
+    default: '添加失败，请重试'
+  },
+  // 输入字段ID
+  inputId: {
+    type: String,
+    default: 'pptTitle'
+  }
+})
+
 // 状态
-const activeTab = ref('cloud')
-const searchKeyword = ref('')
-const selectedFiles = ref([])
-const selectAll = ref(false)
-const localFile = ref(null)
+const pptTitle = ref('')
+const selectedFile = ref(null)
+const errorMessage = ref('')
+const isLoading = ref(false)
+const showConfirmDialog = ref(false)
+const operationStatus = ref('') // 'success' or 'error'
+const statusMessage = ref('')
 const fileInput = ref(null)
 
-// 模拟文件数据
-const mockFiles = ref([
-  { id: 1, name: 'PPT模板1.pptx', size: '10MB', createTime: '2026-03-01 10:00' },
-  { id: 2, name: '产品演示.mp4', size: '150MB', createTime: '2026-03-02 14:30' },
-  { id: 3, name: '会议记录.pptx', size: '5MB', createTime: '2026-03-03 09:15' },
-  { id: 4, name: '培训视频.avi', size: '200MB', createTime: '2026-03-04 16:45' }
-])
-
-// 过滤后的文件列表
-const filteredFiles = computed(() => {
-  let files = mockFiles.value
-  
-  // 过滤文件格式
-  files = files.filter(file => {
-    const ext = file.name.toLowerCase().split('.').pop()
-    return ['pptx', 'pdf', 'jpg'].includes(ext)
-  })
-  
-  // 搜索过滤
-  if (searchKeyword.value) {
-    files = files.filter(file => 
-      file.name.toLowerCase().includes(searchKeyword.value.toLowerCase())
-    )
-  }
-  
-  return files
+// 计算属性 - 确认消息
+const confirmMessage = computed(() => {
+  return `确定要添加PPT "${pptTitle.value}" 吗？`
 })
 
-// 是否可以确认
-const canConfirm = computed(() => {
-  if (activeTab.value === 'cloud') {
-    return selectedFiles.value.length > 0
-  } else {
-    return localFile.value !== null
-  }
-})
-
-// 搜索处理
-const handleSearch = () => {
-  // 搜索逻辑已通过 computed 实现
+// 方法
+// 清除错误信息
+const clearError = () => {
+  errorMessage.value = ''
 }
 
-// 全选/取消全选
-const handleSelectAll = () => {
-  if (selectAll.value) {
-    selectedFiles.value = filteredFiles.value.map(file => file.id)
-  } else {
-    selectedFiles.value = []
-  }
-}
-
-// 选择单个文件
-const handleCloudFileSelect = (fileId) => {
-  const index = selectedFiles.value.indexOf(fileId)
-  if (index > -1) {
-    selectedFiles.value.splice(index, 1)
-  } else {
-    selectedFiles.value.push(fileId)
-  }
-  
-  // 更新全选状态
-  selectAll.value = selectedFiles.value.length === filteredFiles.value.length && filteredFiles.value.length > 0
-}
-
-// 触发文件选择
+// 触发文件输入
 const triggerFileInput = () => {
   fileInput.value.click()
 }
 
 // 处理文件选择
-const handleLocalFileSelect = (event) => {
+const handleFileChange = (event) => {
   const file = event.target.files[0]
   if (file) {
-    // 检查文件大小
-    if (file.size > 1024 * 1024 * 1024) {
-      alert('文件大小不能超过1GB')
-      return
-    }
-    
-    // 检查文件格式
-    const ext = file.name.toLowerCase().split('.').pop()
-    if (!['pptx', 'pdf', 'jpg'].includes(ext)) {
-      alert('只支持.pptx、.pdf和.jpg格式的文件')
-      return
-    }
-    
-    localFile.value = file
+    selectedFile.value = file
   }
 }
 
-// 处理文件拖拽
-const handleFileDrop = (event) => {
-  const file = event.dataTransfer.files[0]
-  if (file) {
-    // 检查文件大小
-    if (file.size > 1024 * 1024 * 1024) {
-      alert('文件大小不能超过1GB')
-      return
-    }
-    
-    // 检查文件格式
-    const ext = file.name.toLowerCase().split('.').pop()
-    if (!['pptx', 'pdf', 'jpg'].includes(ext)) {
-      alert('只支持.pptx、.pdf和.jpg格式的文件')
-      return
-    }
-    
-    localFile.value = file
-  }
-}
-
-// 移除本地文件
-const removeLocalFile = () => {
-  localFile.value = null
+// 移除文件
+const removeFile = () => {
+  selectedFile.value = null
   if (fileInput.value) {
     fileInput.value.value = ''
   }
 }
 
-// 格式化文件大小
-const formatFileSize = (bytes) => {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+// 验证表单
+const validateForm = () => {
+  if (!pptTitle.value.trim()) {
+    errorMessage.value = 'PPT标题不能为空'
+    return false
+  }
+  if (!selectedFile.value) {
+    errorMessage.value = '请选择PPT文件'
+    return false
+  }
+  return true
 }
 
 // 确认处理
 const handleConfirm = () => {
-  if (activeTab.value === 'cloud') {
-    // 处理网盘文件选择
-    const selectedFileList = mockFiles.value.filter(file => selectedFiles.value.includes(file.id))
-    console.log('选择的网盘文件:', selectedFileList)
-    // 这里可以添加实际的文件处理逻辑
-  } else {
-    // 处理本地文件选择
-    console.log('选择的本地文件:', localFile.value)
-    // 这里可以添加实际的文件上传逻辑
+  if (validateForm()) {
+    showConfirmDialog.value = true
   }
+}
+
+// 确认创建
+const confirmCreateItem = async () => {
+  showConfirmDialog.value = false
+  isLoading.value = true
+  operationStatus.value = ''
+  statusMessage.value = ''
   
-  // 关闭弹窗
-  emit('close')
-  // 触发成功事件
-  emit('success')
+  try {
+    // 模拟API调用
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    
+    // 模拟API成功响应
+    console.log(`${props.title}:`, pptTitle.value)
+    console.log('Selected file:', selectedFile.value)
+    
+    // 显示成功状态
+    operationStatus.value = 'success'
+    statusMessage.value = props.successMessage
+    
+    // 延迟后关闭弹窗并触发成功事件
+    setTimeout(() => {
+      isLoading.value = false
+      emit('close')
+      emit('success', { title: pptTitle.value, file: selectedFile.value })
+    }, 1500)
+  } catch (error) {
+    // 显示错误状态
+    operationStatus.value = 'error'
+    statusMessage.value = props.errorMessageDefault
+    console.error(`${props.title}失败:`, error)
+    isLoading.value = false
+    
+    // 3秒后清除错误状态
+    setTimeout(() => {
+      operationStatus.value = ''
+      statusMessage.value = ''
+    }, 3000)
+  }
+}
+
+// 取消创建
+const cancelCreateItem = () => {
+  showConfirmDialog.value = false
 }
 
 // 事件
 const emit = defineEmits(['close', 'success'])
 
 // 监听Escape键
-
 onMounted(() => {
   document.addEventListener('keydown', handleEscape)
 })
@@ -373,8 +304,7 @@ const handleEscape = (event) => {
 .popup-content {
   position: relative;
   width: 90%;
-  max-width: 800px;
-  max-height: 80vh;
+  max-width: 500px;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(24px);
   border-radius: 20px;
@@ -404,12 +334,13 @@ const handleEscape = (event) => {
   align-items: center;
   padding: 1.5rem 2rem;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background: #3285FA;
 }
 
 .popup-title {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #333;
+  color: white;
   margin: 0;
 }
 
@@ -417,9 +348,9 @@ const handleEscape = (event) => {
   width: 32px;
   height: 32px;
   border: none;
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
-  color: #666;
+  color: white;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -428,7 +359,7 @@ const handleEscape = (event) => {
 }
 
 .close-button:hover {
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.3);
   transform: scale(1.1);
 }
 
@@ -437,192 +368,48 @@ const handleEscape = (event) => {
   height: 16px;
 }
 
-/* 导航栏 */
-.nav-tabs {
-  display: flex;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.nav-tab {
-  flex: 1;
-  padding: 1rem;
-  background: none;
-  border: none;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border-bottom: 2px solid transparent;
-}
-
-.nav-tab:hover {
-  color: #f5622b;
-}
-
-.nav-tab.active {
-  color: #f5622b;
-  border-bottom-color: #f5622b;
-}
-
 /* 内容区域 */
-.tab-content {
-  flex: 1;
+.popup-body {
   padding: 2rem;
-  overflow-y: auto;
 }
 
-/* 网盘导入 */
-.cloud-import {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 搜索区域 */
-.search-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* 表单组 */
+.form-group {
   margin-bottom: 1.5rem;
-  gap: 1rem;
 }
 
-.search-box {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 12px;
-  padding: 0.5rem 1rem;
-}
-
-.search-label {
-  margin-right: 0.75rem;
-  color: #666;
+.form-label {
+  display: block;
   font-size: 0.875rem;
-}
-
-.search-input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  outline: none;
-  font-size: 0.875rem;
-  color: #333;
-}
-
-.search-input::placeholder {
-  color: #999;
-}
-
-.search-button {
-  background: none;
-  border: none;
-  color: #666;
-  cursor: pointer;
-  padding: 0.25rem;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.search-button:hover {
-  background: rgba(0, 0, 0, 0.05);
-}
-
-.search-icon {
-  width: 16px;
-  height: 16px;
-}
-
-.file-stats {
-  font-size: 0.875rem;
-  color: #666;
-  white-space: nowrap;
-}
-
-/* 文件列表 */
-.file-list {
-  flex: 1;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 12px;
-  overflow: hidden;
-  background: white;
-}
-
-.file-list-header {
-  display: grid;
-  grid-template-columns: 40px 1fr 100px 150px;
-  padding: 0.75rem 1rem;
-  background: rgba(0, 0, 0, 0.02);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   font-weight: 600;
-  font-size: 0.875rem;
   color: #333;
+  margin-bottom: 0.5rem;
 }
 
-.list-header-item {
-  display: flex;
-  align-items: center;
-}
-
-.checkbox-column {
-  padding-right: 0.5rem;
-}
-
-.file-list-body {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.file-item {
-  display: grid;
-  grid-template-columns: 40px 1fr 100px 150px;
+.form-input {
+  width: 100%;
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  transition: background-color 0.2s ease;
-}
-
-.file-item:hover {
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.file-item-cell {
-  display: flex;
-  align-items: center;
-  font-size: 0.875rem;
-  color: #333;
-}
-
-.empty-state {
-  padding: 3rem;
-  text-align: center;
-  color: #999;
-  font-size: 0.875rem;
-}
-
-/* 本地导入 */
-.local-import {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-/* 上传区域 */
-.upload-area {
-  position: relative;
-  border: 2px dashed #f5622b;
+  border: 2px solid #E0E8FF;
   border-radius: 12px;
-  padding: 3rem;
-  text-align: center;
-  cursor: pointer;
+  font-size: 1rem;
+  color: #333;
   transition: all 0.3s ease;
-  background: rgba(245, 98, 43, 0.05);
+  box-sizing: border-box;
 }
 
-.upload-area:hover {
-  border-color: #e65a27;
-  background: rgba(245, 98, 43, 0.1);
+.form-input:focus {
+  outline: none;
+  border-color: #3285FA;
+  box-shadow: 0 0 0 3px rgba(50, 133, 250, 0.1);
+}
+
+.form-input::placeholder {
+  color: #999;
+}
+
+/* 文件上传容器 */
+.file-upload-container {
+  position: relative;
 }
 
 .file-input {
@@ -633,112 +420,83 @@ const handleEscape = (event) => {
   height: 100%;
   opacity: 0;
   cursor: pointer;
+  z-index: 2;
 }
 
-.upload-content {
+.file-upload-button {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 2px dashed #E0E8FF;
+  border-radius: 12px;
+  font-size: 1rem;
+  color: #666;
+  background: rgba(50, 133, 250, 0.05);
+  cursor: pointer;
+  transition: all 0.3s ease;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  justify-content: center;
+  gap: 0.75rem;
+  box-sizing: border-box;
+}
+
+.file-upload-button:hover {
+  border-color: #3285FA;
+  background: rgba(50, 133, 250, 0.1);
 }
 
 .upload-icon {
-  font-size: 3rem;
-  font-weight: 300;
-  color: #f5622b;
+  width: 20px;
+  height: 20px;
 }
 
-.upload-text {
-  font-size: 1rem;
-  color: #666;
-  margin: 0;
-}
-
-/* 上传规则 */
-.upload-rules {
-  background: rgba(0, 0, 0, 0.02);
-  border-radius: 12px;
-  padding: 1.5rem;
-}
-
-.rules-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #333;
-  margin: 0 0 1rem 0;
-}
-
-.rules-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.rule-item {
-  font-size: 0.875rem;
-  color: #666;
-  margin-bottom: 0.5rem;
-  line-height: 1.4;
-}
-
-.rule-item.indent {
-  margin-left: 1.5rem;
-}
-
-/* 已选择文件 */
-.selected-file {
-  background: rgba(0, 0, 0, 0.02);
-  border-radius: 12px;
-  padding: 1.5rem;
-}
-
-.selected-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #333;
-  margin: 0 0 1rem 0;
-}
-
+/* 文件信息 */
 .file-info {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+  margin-top: 0.75rem;
   padding: 0.75rem;
-  background: white;
+  background: rgba(50, 133, 250, 0.05);
   border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .file-name {
-  flex: 1;
   font-size: 0.875rem;
   color: #333;
-}
-
-.file-size {
-  font-size: 0.75rem;
-  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
 }
 
-.remove-file {
-  background: none;
+.remove-file-button {
+  width: 24px;
+  height: 24px;
   border: none;
-  color: #999;
+  background: none;
+  color: #666;
   cursor: pointer;
-  padding: 0.25rem;
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
 }
 
-.remove-file:hover {
-  color: #f5622b;
-  background: rgba(245, 98, 43, 0.1);
+.remove-file-button:hover {
+  color: #ff4757;
 }
 
 .remove-icon {
   width: 16px;
   height: 16px;
+}
+
+/* 错误信息 */
+.error-message {
+  font-size: 0.75rem;
+  color: #ff4757;
+  margin-top: 0.5rem;
 }
 
 /* 底部操作区 */
@@ -755,8 +513,8 @@ const handleEscape = (event) => {
 .cancel-button {
   padding: 0.75rem 1.5rem;
   background: white;
-  color: #f5622b;
-  border: 2px solid #f5622b;
+  color: #3285FA;
+  border: 2px solid #3285FA;
   border-radius: 12px;
   font-size: 0.875rem;
   font-weight: 600;
@@ -765,13 +523,13 @@ const handleEscape = (event) => {
 }
 
 .cancel-button:hover {
-  background: rgba(245, 98, 43, 0.05);
+  background: rgba(50, 133, 250, 0.05);
   transform: translateY(-1px);
 }
 
 .confirm-button {
   padding: 0.75rem 1.5rem;
-  background: #f5622b;
+  background: #3285FA;
   color: white;
   border: none;
   border-radius: 12px;
@@ -779,73 +537,25 @@ const handleEscape = (event) => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(245, 98, 43, 0.3);
+  box-shadow: 0 2px 8px rgba(50, 133, 250, 0.3);
 }
 
-.confirm-button:hover:not(:disabled) {
-  background: #e65a27;
+.confirm-button:hover {
+  background: #2563EB;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 98, 43, 0.4);
-}
-
-.confirm-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
+  box-shadow: 0 4px 12px rgba(50, 133, 250, 0.4);
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
   .popup-content {
     width: 95%;
-    max-height: 90vh;
   }
   
   .popup-header,
+  .popup-body,
   .popup-footer {
     padding: 1rem 1.5rem;
-  }
-  
-  .tab-content {
-    padding: 1.5rem;
-  }
-  
-  .search-section {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .file-list-header {
-    grid-template-columns: 40px 1fr 80px 120px;
-    font-size: 0.75rem;
-  }
-  
-  .file-item {
-    grid-template-columns: 40px 1fr 80px 120px;
-    font-size: 0.75rem;
-  }
-  
-  .upload-area {
-    padding: 2rem;
-  }
-  
-  .upload-icon {
-    font-size: 2rem;
-  }
-  
-  .upload-text {
-    font-size: 0.875rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .file-list-header {
-    grid-template-columns: 40px 1fr 60px 100px;
-  }
-  
-  .file-item {
-    grid-template-columns: 40px 1fr 60px 100px;
   }
   
   .popup-footer {
@@ -858,15 +568,187 @@ const handleEscape = (event) => {
   }
 }
 
+/* 确认对话框 */
+.confirm-dialog-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  animation: fadeIn 0.3s ease;
+}
+
+.confirm-dialog {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  animation: slideIn 0.3s ease;
+}
+
+.confirm-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #333;
+  margin: 0 0 1rem 0;
+}
+
+.confirm-message {
+  font-size: 0.875rem;
+  color: #666;
+  margin: 0 0 1.5rem 0;
+  line-height: 1.4;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.confirm-cancel {
+  padding: 0.5rem 1rem;
+  background: white;
+  color: #666;
+  border: 1px solid #E0E8FF;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.confirm-cancel:hover {
+  background: #f5f5f5;
+}
+
+.confirm-confirm {
+  padding: 0.5rem 1rem;
+  background: #3285FA;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.confirm-confirm:hover {
+  background: #2563EB;
+}
+
+/* 状态提示 */
+.status-toast {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slideInRight 0.3s ease;
+  z-index: 10000;
+}
+
+.status-toast.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-toast.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.status-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.status-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.status-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* 加载遮罩 */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(2px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3285FA;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+.loading-text {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+/* 动画 */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 /* 减少动画偏好 */
 @media (prefers-reduced-motion: reduce) {
   .add-ppt-popup,
   .popup-content,
   .close-button,
-  .nav-tab,
-  .upload-area,
+  .form-input,
+  .file-upload-button,
   .cancel-button,
-  .confirm-button {
+  .confirm-button,
+  .confirm-dialog-overlay,
+  .confirm-dialog,
+  .status-toast,
+  .loading-spinner {
     animation: none;
     transition: none;
   }

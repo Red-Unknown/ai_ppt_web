@@ -1,9 +1,9 @@
 <template>
-  <div class="add-chapt-popup" @click.self="$emit('close')">
+  <div class="add-item-popup" @click.self="$emit('close')">
     <div class="popup-content">
-      <!-- 弹窗标题 -->
+      <!-- 弹窗标题 - 通过props传入 -->
       <div class="popup-header">
-        <h2 class="popup-title">添加章节</h2>
+        <h2 class="popup-title">{{ title }}</h2>
         <button class="close-button" @click="$emit('close')">
           <svg class="close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -14,15 +14,15 @@
       
       <!-- 内容区域 -->
       <div class="popup-body">
-        <!-- 章节名称输入 -->
+        <!-- 输入区域 - 通过props传入标签和占位符 -->
         <div class="form-group">
-          <label class="form-label" for="chapterName">章节名称</label>
+          <label class="form-label" :for="inputId">{{ inputLabel }}</label>
           <input 
-            id="chapterName"
-            v-model="chapterName" 
+            :id="inputId"
+            v-model="itemName" 
             type="text" 
             class="form-input"
-            placeholder="请输入章节名称"
+            :placeholder="inputPlaceholder"
             @input="clearError"
             @keyup.enter="handleConfirm"
           />
@@ -40,23 +40,23 @@
           @click="handleConfirm"
           :disabled="isLoading"
         >
-          {{ isLoading ? '创建中...' : '确认' }}
+          {{ isLoading ? loadingText : '确认' }}
         </button>
       </div>
       
-      <!-- 确认对话框 -->
+      <!-- 确认对话框 - 通过props传入文本 -->
       <div v-if="showConfirmDialog" class="confirm-dialog-overlay">
         <div class="confirm-dialog">
-          <h3 class="confirm-title">确认创建章节</h3>
-          <p class="confirm-message">确定要创建章节 "{{ chapterName }}" 吗？</p>
+          <h3 class="confirm-title">{{ confirmTitle }}</h3>
+          <p class="confirm-message">{{ confirmMessage }}</p>
           <div class="confirm-actions">
-            <button class="confirm-cancel" @click="cancelCreateChapter">取消</button>
-            <button class="confirm-confirm" @click="confirmCreateChapter">确定</button>
+            <button class="confirm-cancel" @click="cancelCreateItem">取消</button>
+            <button class="confirm-confirm" @click="confirmCreateItem">确定</button>
           </div>
         </div>
       </div>
       
-      <!-- 状态提示 -->
+      <!-- 状态提示 - 通过props传入消息 -->
       <div v-if="operationStatus" :class="['status-toast', operationStatus]">
         <div class="status-content">
           <svg v-if="operationStatus === 'success'" class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -71,26 +71,76 @@
         </div>
       </div>
       
-      <!-- 加载遮罩 -->
+      <!-- 加载遮罩 - 通过props传入文本 -->
       <div v-if="isLoading" class="loading-overlay">
         <div class="loading-spinner"></div>
-        <div class="loading-text">创建章节中...</div>
+        <div class="loading-text">{{ loadingText }}</div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+
+// Props
+const props = defineProps({
+  // 弹窗标题
+  title: {
+    type: String,
+    default: '添加项目'
+  },
+  // 输入字段标签
+  inputLabel: {
+    type: String,
+    default: '名称'
+  },
+  // 输入字段占位符
+  inputPlaceholder: {
+    type: String,
+    default: '请输入名称'
+  },
+  // 确认对话框标题
+  confirmTitle: {
+    type: String,
+    default: '确认添加'
+  },
+  // 加载文本
+  loadingText: {
+    type: String,
+    default: '添加中...'
+  },
+  // 成功消息
+  successMessage: {
+    type: String,
+    default: '添加成功！'
+  },
+  // 错误消息
+  errorMessageDefault: {
+    type: String,
+    default: '添加失败，请重试'
+  },
+  // 输入字段ID
+  inputId: {
+    type: String,
+    default: 'itemName'
+  }
+})
 
 // 状态
-const chapterName = ref('')
+const itemName = ref('')
 const errorMessage = ref('')
 const isLoading = ref(false)
 const showConfirmDialog = ref(false)
 const operationStatus = ref('') // 'success' or 'error'
 const statusMessage = ref('')
 
+// 计算属性 - 确认消息
+const confirmMessage = computed(() => {
+  return `确定要创建${props.title.replace('添加', '')} "${itemName.value}" 吗？`
+})
+
+// 方法
 // 清除错误信息
 const clearError = () => {
   errorMessage.value = ''
@@ -98,8 +148,8 @@ const clearError = () => {
 
 // 验证表单
 const validateForm = () => {
-  if (!chapterName.value.trim()) {
-    errorMessage.value = '章节名称不能为空'
+  if (!itemName.value.trim()) {
+    errorMessage.value = `${props.inputLabel}不能为空`
     return false
   }
   return true
@@ -108,13 +158,12 @@ const validateForm = () => {
 // 确认处理
 const handleConfirm = () => {
   if (validateForm()) {
-    // 显示确认对话框
     showConfirmDialog.value = true
   }
 }
 
-// 确认创建章节
-const confirmCreateChapter = async () => {
+// 确认创建
+const confirmCreateItem = async () => {
   showConfirmDialog.value = false
   isLoading.value = true
   operationStatus.value = ''
@@ -122,29 +171,26 @@ const confirmCreateChapter = async () => {
   
   try {
     // 模拟API调用
-    // 实际项目中，这里应该调用真实的后端API
-    await new Promise(resolve => setTimeout(resolve, 1000)) // 模拟网络延迟
+    await new Promise(resolve => setTimeout(resolve, 1000))
     
     // 模拟API成功响应
-    console.log('添加章节:', chapterName.value)
+    console.log(`${props.title}:`, itemName.value)
     
     // 显示成功状态
     operationStatus.value = 'success'
-    statusMessage.value = '章节创建成功！'
+    statusMessage.value = props.successMessage
     
     // 延迟后关闭弹窗并触发成功事件
     setTimeout(() => {
       isLoading.value = false
-      // 关闭弹窗
       emit('close')
-      // 触发成功事件，传递章节名称
-      emit('success', chapterName.value)
+      emit('success', itemName.value)
     }, 1500)
   } catch (error) {
     // 显示错误状态
     operationStatus.value = 'error'
-    statusMessage.value = '章节创建失败，请重试'
-    console.error('添加章节失败:', error)
+    statusMessage.value = props.errorMessageDefault
+    console.error(`${props.title}失败:`, error)
     isLoading.value = false
     
     // 3秒后清除错误状态
@@ -155,8 +201,8 @@ const confirmCreateChapter = async () => {
   }
 }
 
-// 取消创建章节
-const cancelCreateChapter = () => {
+// 取消创建
+const cancelCreateItem = () => {
   showConfirmDialog.value = false
 }
 
@@ -181,7 +227,7 @@ const handleEscape = (event) => {
 
 <style scoped>
 /* 弹窗容器 */
-.add-chapt-popup {
+.add-item-popup {
   position: fixed;
   top: 0;
   left: 0;
@@ -558,7 +604,7 @@ const handleEscape = (event) => {
 
 /* 减少动画偏好 */
 @media (prefers-reduced-motion: reduce) {
-  .add-chapt-popup,
+  .add-item-popup,
   .popup-content,
   .close-button,
   .form-input,
