@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.app.core.config import settings
-from backend.app.api.v1 import chat, student
-from backend.app.core.logging_config import setup_logging
+from app.core.config import settings
+from app.api.v1 import chat, student, Login
+from app.core.logging_config import setup_logging
 
 def get_application() -> FastAPI:
     # 初始化日志系统
@@ -26,6 +26,7 @@ def get_application() -> FastAPI:
     # Include Routers
     application.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
     application.include_router(student.router, prefix="/api/v1/student", tags=["student"])
+    application.include_router(Login.router)
 
     return application
 

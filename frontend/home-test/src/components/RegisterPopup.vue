@@ -48,6 +48,29 @@
           </div>
         </div>
         
+        <!-- 学号/工号输入框 -->
+        <div class="form-group">
+          <div class="input-wrapper">
+            <div class="input-icon">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+            </div>
+            <input
+              v-model="form.idNumber"
+              type="text"
+              class="form-input"
+              :placeholder="selectedRole === 'student' ? '请输入学号' : '请输入工号'"
+              @focus="handleInputFocus"
+              @blur="handleInputBlur"
+            />
+          </div>
+        </div>
+        
         <!-- 验证码输入框 -->
         <div class="form-group">
           <div class="input-wrapper captcha-wrapper">
@@ -79,7 +102,7 @@
         
         <!-- 密码输入框 -->
         <div class="form-group">
-          <div class="input-wrapper password-wrapper">
+          <div class="input-wrapper">
             <div class="input-icon">
               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
@@ -87,24 +110,12 @@
             </div>
             <input
               v-model="form.password"
-              :type="showPassword ? 'text' : 'password'"
+              type="password"
               class="form-input"
               placeholder="设置密码"
               @focus="handleInputFocus"
               @blur="handleInputBlur"
             />
-            <button class="password-toggle" @click.prevent="togglePassword">
-              <svg v-show="!showPassword" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path>
-                <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path>
-                <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"></path>
-                <line x1="2" y1="2" x2="22" y2="22"></line>
-              </svg>
-              <svg v-show="showPassword" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
-              </svg>
-            </button>
           </div>
           <p class="password-rule">密码要求 8-16 位，至少包含数字、字母、字符两种元素</p>
         </div>
@@ -150,30 +161,25 @@ const emit = defineEmits(['close', 'success'])
 
 // 状态
 const selectedRole = ref('student')
-const showPassword = ref(false)
 const isSubmitting = ref(false)
 const countdown = ref(0)
 
 // 表单数据
 const form = ref({
   phone: '',
+  idNumber: '',
   captcha: '',
   password: ''
 })
 
 // 计算属性
 const isFormValid = computed(() => {
-  return selectedRole.value && form.value.phone && form.value.captcha && form.value.password
+  return selectedRole.value && form.value.phone && form.value.idNumber && form.value.captcha && form.value.password
 })
 
 // 选择角色
 const selectRole = (role) => {
   selectedRole.value = role
-}
-
-// 切换密码显示
-const togglePassword = () => {
-  showPassword.value = !showPassword.value
 }
 
 // 输入框聚焦处理
@@ -224,13 +230,31 @@ const handleSubmit = async () => {
   isSubmitting.value = true
   
   try {
+    // 准备注册数据
+    const registerData = {
+      phone: form.value.phone,
+      code: form.value.captcha,
+      password: form.value.password,
+      name: '用户', // 暂时使用默认名称，实际项目中应该添加姓名输入字段
+    }
+    
+    // 根据角色添加不同的字段
+    if (selectedRole.value === 'student') {
+      registerData.username = form.value.idNumber
+      registerData.student_id = form.value.idNumber
+    } else {
+      registerData.username = form.value.idNumber
+      registerData.teacher_id = form.value.idNumber
+    }
+    
     // 模拟注册请求
     await new Promise(resolve => setTimeout(resolve, 1500))
-    console.log('注册成功', form.value)
+    console.log('注册成功', registerData)
     
     // 保存登录状态
     localStorage.setItem('token', 'mock-token') // 模拟token
     localStorage.setItem('userRole', selectedRole.value)
+    localStorage.setItem('userId', form.value.idNumber)
     
     alert('注册成功！')
     
@@ -467,43 +491,7 @@ const handleMouseLeave = (e) => {
   letter-spacing: 0.01em;
 }
 
-/* 密码包装器 */
-.password-wrapper {
-  position: relative;
-}
 
-.password-wrapper .form-input {
-  padding-right: 3rem;
-}
-
-.password-toggle {
-  position: absolute;
-  right: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-  z-index: 1;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-}
-
-.password-toggle:hover {
-  color: #64748b;
-  background: rgba(0, 0, 0, 0.05);
-}
-
-.password-toggle .icon {
-  width: 1.25rem;
-  height: 1.25rem;
-}
 
 /* 密码规则 */
 .password-rule {

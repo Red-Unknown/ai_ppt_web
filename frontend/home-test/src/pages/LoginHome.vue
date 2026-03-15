@@ -18,9 +18,7 @@
         </svg>
       </button>
       <div class="navbar-logo"></div>
-      <div class="navbar-avatar">
-        <div class="avatar-placeholder"></div>
-      </div>
+      <div class="navbar-avatar"></div>
     </nav>
     
     <!-- 主内容区 -->
@@ -291,16 +289,7 @@ const handleForgotFromLogin = () => {
   align-items: center;
 }
 
-.avatar-placeholder {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.5);
-  border: 2px solid rgba(255, 255, 255, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+
 
 /* 主内容区 */
 .main-content {

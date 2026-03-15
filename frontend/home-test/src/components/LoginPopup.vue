@@ -202,28 +202,51 @@ const handleSubmit = async () => {
   isSubmitting.value = true
   
   try {
-    // 模拟登录请求
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    console.log('登录成功', form.value)
+    // 调用后端登录API
+    const response = await fetch('http://localhost:8000/api/v1/login/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        username: form.value.username,
+        password: form.value.password
+      })
+    })
     
-    // 保存登录状态
-    if (form.value.rememberMe) {
-      localStorage.setItem('rememberedUsername', form.value.username)
-      localStorage.setItem('token', 'mock-token') // 模拟token
+    const data = await response.json()
+    
+    if (data.success) {
+      console.log('登录成功', data)
+      
+      // 保存登录状态
+      if (form.value.rememberMe) {
+        localStorage.setItem('rememberedUsername', form.value.username)
+      } else {
+        localStorage.removeItem('rememberedUsername')
+      }
+      
+      // 保存会话ID
+      localStorage.setItem('session_id', data.data.session_id)
+      localStorage.setItem('user_info', JSON.stringify(data.data.user))
+      
+      alert('登录成功！')
+      
+      // 通知父组件登录成功
+      emit('success')
+      
+      // 根据用户角色跳转到不同页面
+      if (data.data.user.role === 'teacher') {
+        router.push('/ppt-show2')
+      } else {
+        router.push('/ppt-show')
+      }
     } else {
-      localStorage.removeItem('rememberedUsername')
+      alert(`登录失败: ${data.error}`)
     }
-    
-    alert('登录成功！')
-    
-    // 通知父组件登录成功
-    emit('success')
-    
-    // 跳转到PPT展示页面
-    router.push('/ppt-show')
   } catch (error) {
     console.error('登录失败', error)
-    alert('登录失败，请重试')
+    alert('登录失败，请检查网络连接')
   } finally {
     isSubmitting.value = false
   }
