@@ -29,20 +29,42 @@ class LoginService:
         """生成会话ID"""
         return hashlib.sha256(f"{username}_{time.time()}".encode()).hexdigest()
     
-    def authenticate(self, username: str, password: str) -> Tuple[bool, Optional[Dict]]:
-        """用户身份验证"""
-        if username not in self.users:
-            return False, {"error": "用户名不存在"}
+    def authenticate(self, identifier: str, password: str) -> Tuple[bool, Optional[Dict]]:
+        """用户身份验证
+        identifier: 可以是用户名、学号、手机号
+        """
+        # 查找用户
+        user = None
+        username = None
         
-        if self.users[username]["password"] != self._hash_password(password):
+        # 首先尝试直接通过用户名查找
+        if identifier in self.users:
+            user = self.users[identifier]
+            username = identifier
+        else:
+            # 尝试通过学号或手机号查找
+            for user_id, user_info in self.users.items():
+                if "student_id" in user_info and user_info["student_id"] == identifier:
+                    user = user_info
+                    username = user_id
+                    break
+                elif "phone" in user_info and user_info["phone"] == identifier:
+                    user = user_info
+                    username = user_id
+                    break
+        
+        if not user:
+            return False, {"error": "用户不存在"}
+        
+        if user["password"] != self._hash_password(password):
             return False, {"error": "密码错误"}
         
         # 生成会话
         session_id = self._generate_session_id(username)
         self.sessions[session_id] = {
             "username": username,
-            "role": self.users[username]["role"],
-            "name": self.users[username]["name"],
+            "role": user["role"],
+            "name": user["name"],
             "created_at": time.time()
         }
         
@@ -50,8 +72,8 @@ class LoginService:
             "session_id": session_id,
             "user": {
                 "username": username,
-                "role": self.users[username]["role"],
-                "name": self.users[username]["name"]
+                "role": user["role"],
+                "name": user["name"]
             }
         }
     

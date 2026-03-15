@@ -105,7 +105,8 @@ async def register_student(request: StudentRegisterRequest):
             request.username, 
             request.password, 
             request.name,
-            request.student_id
+            request.student_id,
+            request.phone
         )
         if success:
             return RegisterResponse(
@@ -139,7 +140,8 @@ async def register_teacher(request: TeacherRegisterRequest):
             request.username, 
             request.password, 
             request.name,
-            request.teacher_id
+            request.teacher_id,
+            request.phone
         )
         if success:
             return RegisterResponse(

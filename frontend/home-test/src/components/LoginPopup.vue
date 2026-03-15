@@ -20,10 +20,10 @@
               </svg>
             </div>
             <input
-              v-model="form.username"
+              v-model="form.identifier"
               type="text"
               class="form-input"
-              placeholder="请输入账号"
+              placeholder="请输入学号/工号、手机号"
               @focus="handleInputFocus"
               @blur="handleInputBlur"
             />
@@ -146,7 +146,7 @@ const emit = defineEmits(['close', 'success', 'register', 'forgot'])
 
 // 表单数据
 const form = ref({
-  username: '',
+  identifier: '',
   password: '',
   captcha: '',
   rememberMe: false
@@ -188,7 +188,7 @@ const handleSubmit = async () => {
   if (isSubmitting.value) return
   
   // 简单验证
-  if (!form.value.username || !form.value.password || !form.value.captcha) {
+  if (!form.value.identifier || !form.value.password || !form.value.captcha) {
     alert('请填写所有字段')
     return
   }
@@ -209,7 +209,7 @@ const handleSubmit = async () => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        username: form.value.username,
+        identifier: form.value.identifier,
         password: form.value.password
       })
     })
@@ -221,9 +221,9 @@ const handleSubmit = async () => {
       
       // 保存登录状态
       if (form.value.rememberMe) {
-        localStorage.setItem('rememberedUsername', form.value.username)
+        localStorage.setItem('rememberedIdentifier', form.value.identifier)
       } else {
-        localStorage.removeItem('rememberedUsername')
+        localStorage.removeItem('rememberedIdentifier')
       }
       
       // 保存会话ID

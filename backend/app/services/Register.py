@@ -172,7 +172,7 @@ class RegisterService:
         
         return True, None
     
-    def register_student(self, username: str, password: str, name: str, student_id: str) -> Tuple[bool, Optional[Dict]]:
+    def register_student(self, username: str, password: str, name: str, student_id: str, phone: str) -> Tuple[bool, Optional[Dict]]:
         """学生注册"""
         # 验证注册信息
         valid, error = self._validate_student_register(username, password, name, student_id)
@@ -184,7 +184,8 @@ class RegisterService:
             "password": self._hash_password(password),
             "role": "student",
             "name": name,
-            "student_id": student_id
+            "student_id": student_id,
+            "phone": phone
         }
         
         # 注册成功后自动登录
@@ -195,6 +196,7 @@ class RegisterService:
                 "role": "student",
                 "name": name,
                 "student_id": student_id,
+                "phone": phone,
                 "session_id": login_result.get("session_id"),
                 "user": login_result.get("user")
             }
@@ -203,10 +205,11 @@ class RegisterService:
                 "username": username,
                 "role": "student",
                 "name": name,
-                "student_id": student_id
+                "student_id": student_id,
+                "phone": phone
             }
     
-    def register_teacher(self, username: str, password: str, name: str, teacher_id: str) -> Tuple[bool, Optional[Dict]]:
+    def register_teacher(self, username: str, password: str, name: str, teacher_id: str, phone: str) -> Tuple[bool, Optional[Dict]]:
         """教师注册"""
         # 验证注册信息
         valid, error = self._validate_teacher_register(username, password, name, teacher_id)
@@ -218,7 +221,8 @@ class RegisterService:
             "password": self._hash_password(password),
             "role": "teacher",
             "name": name,
-            "teacher_id": teacher_id
+            "teacher_id": teacher_id,
+            "phone": phone
         }
         
         # 注册成功后自动登录
@@ -229,6 +233,7 @@ class RegisterService:
                 "role": "teacher",
                 "name": name,
                 "teacher_id": teacher_id,
+                "phone": phone,
                 "session_id": login_result.get("session_id"),
                 "user": login_result.get("user")
             }
@@ -237,7 +242,8 @@ class RegisterService:
                 "username": username,
                 "role": "teacher",
                 "name": name,
-                "teacher_id": teacher_id
+                "teacher_id": teacher_id,
+                "phone": phone
             }
 
 # 单例模式

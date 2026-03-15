@@ -6,7 +6,7 @@ from app.services.Login import login_service
 router = APIRouter(prefix="/api/v1/login", tags=["login"])
 
 class LoginRequest(BaseModel):
-    username: str
+    identifier: str
     password: str
 
 class LoginResponse(BaseModel):
@@ -23,9 +23,11 @@ class ValidateSessionRequest(BaseModel):
 
 @router.post("/", response_model=LoginResponse)
 async def login(request: LoginRequest):
-    """用户登录接口"""
+    """用户登录接口
+    identifier: 可以是用户名、学号、手机号
+    """
     try:
-        success, result = login_service.authenticate(request.username, request.password)
+        success, result = login_service.authenticate(request.identifier, request.password)
         if success:
             return LoginResponse(
                 success=True,
