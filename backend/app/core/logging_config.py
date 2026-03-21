@@ -2,7 +2,7 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from backend.app.core.config import settings
+from app.core.config import settings
 
 def setup_logging():
     """
@@ -10,7 +10,7 @@ def setup_logging():
     符合行业标准：文件轮转、分级日志、结构化格式
     """
     # 创建日志目录
-    log_dir = Path("f:/college/sophomore/服务外包/log")
+    log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
     
     # 配置根日志器

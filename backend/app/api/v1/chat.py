@@ -2,15 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, WebSocke
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import Optional
 import json
-from backend.app.schemas.qa import (
+from app.schemas.qa import (
     ChatRequest, ChatResponse, AdaptScriptRequest, AdaptScriptResponse,
     ChatSessionResponse, ChatMessage, TruncateRequest
 )
-from backend.app.schemas.session import StartSessionRequest, SessionResponse, PreviewStatusResponse
-from backend.app.services.qa.service import QAService
-from backend.app.services.session.manager import SessionManager
-from backend.app.services.student.state_manager import StudentStateManager
-from backend.app.utils.cache import local_cache
+from app.schemas.session import StartSessionRequest, SessionResponse, PreviewStatusResponse
+from app.services.qa.service import QAService
+from app.services.session.manager import SessionManager
+from app.services.student.state_manager import StudentStateManager
+from app.utils.cache import local_cache
 
 router = APIRouter()
 

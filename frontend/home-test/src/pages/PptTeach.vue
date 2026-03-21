@@ -103,7 +103,7 @@
           </div>
           <div class="panel-content">
             <div class="ppt-content">
-              <img src="https://via.placeholder.com/800x450/FFD700/333?text=三角形面积计算" alt="PPT内容" class="ppt-image">
+              <!-- 移除占位图片 -->
             </div>
             
             <!-- 悬浮提问框 -->

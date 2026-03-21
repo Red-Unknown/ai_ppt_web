@@ -21,44 +21,16 @@
               v-model="form.phone"
               type="tel"
               class="form-input"
-              placeholder="请输入注册手机号"
+              :placeholder="errors.phone || '请输入注册手机号'"
               @focus="handleInputFocus"
               @blur="handleInputBlur"
               @input="validatePhone"
+              :class="{ 'input-error': errors.phone }"
             />
           </div>
-          <p v-if="errors.phone" class="error-message">{{ errors.phone }}</p>
         </div>
         
-        <!-- 验证码输入框 -->
-        <div class="form-group">
-          <div class="input-wrapper captcha-wrapper">
-            <div class="input-icon">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-              </svg>
-            </div>
-            <input
-              v-model="form.captcha"
-              type="text"
-              class="form-input"
-              placeholder="验证码"
-              @focus="handleInputFocus"
-              @blur="handleInputBlur"
-              @input="validateCaptcha"
-            />
-            <button 
-              type="button" 
-              class="captcha-button"
-              @click="sendCaptcha"
-              :disabled="countdown > 0 || !isPhoneValid"
-            >
-              {{ countdown > 0 ? `${countdown}s` : '发送验证码' }}
-            </button>
-          </div>
-          <p v-if="errors.captcha" class="error-message">{{ errors.captcha }}</p>
-        </div>
+
         
         <!-- 新密码输入框 -->
         <div class="form-group">
@@ -70,32 +42,19 @@
             </div>
             <input
               v-model="form.newPassword"
-              :type="showPassword ? 'text' : 'password'"
+              :type="'password'"
               class="form-input"
-              placeholder="设置新密码"
+              :placeholder="errors.newPassword || '设置新密码'"
               @focus="handleInputFocus"
               @blur="handleInputBlur"
               @input="validateNewPassword"
+              :class="{ 'input-error': errors.newPassword }"
             />
-            <button class="password-toggle" @click.prevent="togglePassword">
-              <svg v-show="!showPassword" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path>
-                <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path>
-                <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"></path>
-                <line x1="2" y1="2" x2="22" y2="22"></line>
-              </svg>
-              <svg v-show="showPassword" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
-              </svg>
-            </button>
           </div>
-          <p class="password-rule">密码要求 8-16 位，至少包含数字、字母、字符两种元素</p>
           <div class="password-strength" v-if="form.newPassword">
             <div class="strength-bar" :class="passwordStrengthClass"></div>
             <span class="strength-text">{{ passwordStrengthText }}</span>
           </div>
-          <p v-if="errors.newPassword" class="error-message">{{ errors.newPassword }}</p>
         </div>
         
         <!-- 确认密码输入框 -->
@@ -108,29 +67,23 @@
             </div>
             <input
               v-model="form.confirmPassword"
-              :type="showPassword ? 'text' : 'password'"
+              :type="'password'"
               class="form-input"
-              placeholder="确认新密码"
+              :placeholder="errors.confirmPassword || '确认新密码'"
               @focus="handleInputFocus"
               @blur="handleInputBlur"
               @input="validateConfirmPassword"
+              :class="{ 'input-error': errors.confirmPassword }"
             />
           </div>
-          <p v-if="errors.confirmPassword" class="error-message">{{ errors.confirmPassword }}</p>
+          <p class="password-rule">密码要求 8-16 位，至少包含数字、字母、字符两种元素</p>
         </div>
         
         <!-- 操作按钮区域 -->
         <div class="button-group">
           <button
-            type="button"
-            class="cancel-button"
-            @click="handleCancel"
-          >
-            取消
-          </button>
-          <button
             type="submit"
-            class="login-button"
+            class="login-button full-width"
             :disabled="!isFormValid"
           >
             <span v-if="!isSubmitting">重置密码</span>
@@ -159,7 +112,6 @@ const router = useRouter()
 const emit = defineEmits(['close', 'success'])
 
 // 状态
-const showPassword = ref(false)
 const isSubmitting = ref(false)
 const countdown = ref(0)
 const isPhoneValid = ref(false)
@@ -184,12 +136,10 @@ const errors = ref({
 const isFormValid = computed(() => {
   return (
     isPhoneValid.value &&
-    form.value.captcha &&
     form.value.newPassword &&
     form.value.confirmPassword &&
     form.value.newPassword === form.value.confirmPassword &&
     !errors.value.phone &&
-    !errors.value.captcha &&
     !errors.value.newPassword &&
     !errors.value.confirmPassword
   )
@@ -234,10 +184,7 @@ const passwordStrengthText = computed(() => {
   }
 })
 
-// 切换密码显示
-const togglePassword = () => {
-  showPassword.value = !showPassword.value
-}
+
 
 // 输入框聚焦处理
 const handleInputFocus = (event) => {
@@ -335,22 +282,41 @@ const validateConfirmPassword = () => {
 }
 
 // 发送验证码
-const sendCaptcha = () => {
+const sendCaptcha = async () => {
   if (!isPhoneValid.value) {
     validatePhone()
     return
   }
   
-  // 模拟发送验证码
-  countdown.value = 60
-  const timer = setInterval(() => {
-    countdown.value--
-    if (countdown.value <= 0) {
-      clearInterval(timer)
+  try {
+    // 调用后端API发送验证码
+    const response = await fetch('http://localhost:8000/api/v1/forget/send-code', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ phone: form.value.phone })
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      countdown.value = 60
+      const timer = setInterval(() => {
+        countdown.value--
+        if (countdown.value <= 0) {
+          clearInterval(timer)
+        }
+      }, 1000)
+      
+      alert(data.message || '验证码已发送')
+    } else {
+      const errorData = await response.json()
+      alert(`发送验证码失败: ${errorData.detail || '发送失败，请重试'}`)
     }
-  }, 1000)
-  
-  alert('验证码已发送')
+  } catch (error) {
+    console.error('发送验证码失败', error)
+    alert('发送验证码失败，请检查网络连接')
+  }
 }
 
 // 提交处理
@@ -359,7 +325,6 @@ const handleSubmit = async () => {
   
   // 验证表单
   validatePhone()
-  validateCaptcha()
   validateNewPassword()
   validateConfirmPassword()
   
@@ -370,37 +335,50 @@ const handleSubmit = async () => {
   isSubmitting.value = true
   
   try {
-    // 模拟重置密码请求
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    console.log('密码重置成功', form.value)
+    // 调用后端API重置密码
+    const response = await fetch('http://localhost:8000/api/v1/forget/reset-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        phone: form.value.phone,
+        new_password: form.value.newPassword
+      })
+    })
     
-    alert('密码重置成功！')
-    
-    // 通知父组件重置成功
-    emit('success')
-    
-    // 关闭弹窗
-    emit('close')
+    if (response.ok) {
+      const data = await response.json()
+      console.log('密码重置成功', data)
+      
+      alert(data.message || '密码重置成功！')
+      
+      // 通知父组件重置成功
+      emit('success')
+      
+      // 关闭弹窗
+      emit('close')
+    } else {
+      const errorData = await response.json()
+      alert(`密码重置失败: ${errorData.detail || '重置失败，请重试'}`)
+    }
   } catch (error) {
     console.error('密码重置失败', error)
-    alert('密码重置失败，请重试')
+    alert('密码重置失败，请检查网络连接')
   } finally {
     isSubmitting.value = false
   }
 }
 
-// 取消操作
-const handleCancel = () => {
-  emit('close')
-}
+
 
 // 鼠标悬停特效
-let hoverCircle = null
-let isAnimating = false
+const hoverCircle = ref(null)
+const isAnimating = ref(false)
 
 // 鼠标进入事件
 const handleMouseEnter = (e) => {
-  if (isAnimating) return
+  if (isAnimating.value) return
   
   // 计算鼠标在容器内的位置
   const rect = e.target.getBoundingClientRect()
@@ -414,18 +392,18 @@ const handleMouseEnter = (e) => {
   circle.style.top = y + 'px'
   
   e.target.appendChild(circle)
-  hoverCircle = circle
-  isAnimating = true
+  hoverCircle.value = circle
+  isAnimating.value = true
   
   // 动画结束后重置状态
   setTimeout(() => {
-    isAnimating = false
+    isAnimating.value = false
   }, 500)
 }
 
 // 鼠标离开事件
 const handleMouseLeave = (e) => {
-  if (isAnimating || !hoverCircle) return
+  if (isAnimating.value || !hoverCircle.value) return
   
   // 计算鼠标离开时的位置
   const rect = e.target.getBoundingClientRect()
@@ -433,19 +411,19 @@ const handleMouseLeave = (e) => {
   const y = e.clientY - rect.top
   
   // 应用离开动画
-  hoverCircle.className = 'hover-circle out'
-  hoverCircle.style.left = x + 'px'
-  hoverCircle.style.top = y + 'px'
+  hoverCircle.value.className = 'hover-circle out'
+  hoverCircle.value.style.left = x + 'px'
+  hoverCircle.value.style.top = y + 'px'
   
-  isAnimating = true
+  isAnimating.value = true
   
   // 动画结束后移除元素
   setTimeout(() => {
-    if (hoverCircle && hoverCircle.parentNode) {
-      hoverCircle.parentNode.removeChild(hoverCircle)
+    if (hoverCircle.value && hoverCircle.value.parentNode) {
+      hoverCircle.value.parentNode.removeChild(hoverCircle.value)
     }
-    hoverCircle = null
-    isAnimating = false
+    hoverCircle.value = null
+    isAnimating.value = false
   }, 500)
 }
 </script>
@@ -489,7 +467,7 @@ const handleMouseLeave = (e) => {
 .login-title {
   font-size: 1.875rem;
   font-weight: 700;
-  color: #f5622b;
+  color: rgb(255, 124, 75);
   margin-bottom: 0.5rem;
   line-height: 1.3;
   letter-spacing: -0.02em;
@@ -528,9 +506,10 @@ const handleMouseLeave = (e) => {
 
 /* 输入框聚焦效果 */
 .input-wrapper.input-focused {
-  border-color: rgba(255, 255, 255, 1);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.1);
   background: rgba(255, 255, 255, 0.7);
+  border: 1px solid #94a3b8;
 }
 
 /* 输入框图标 */
@@ -564,6 +543,14 @@ const handleMouseLeave = (e) => {
 .form-input::placeholder {
   color: #94a3b8;
   letter-spacing: 0.01em;
+}
+
+.form-input.input-error::placeholder {
+  color: #ef4444;
+}
+
+.form-input.input-error {
+  border-color: #ef4444;
 }
 
 /* 密码包装器 */
@@ -657,30 +644,34 @@ const handleMouseLeave = (e) => {
 .captcha-wrapper {
   display: flex;
   align-items: center;
+  width: 100%;
 }
 
 /* 验证码输入框 */
 .captcha-wrapper .form-input {
   flex: 1;
   padding-right: 1rem;
+  min-width: 0;
 }
 
 /* 验证码按钮 */
 .captcha-button {
   padding: 1rem 1.25rem;
-  background: none;
+  background: white;
   border-left: 1px solid rgba(255, 255, 255, 0.3);
   font-size: 0.875rem;
   font-weight: 600;
-  color: #f5622b;
+  color: rgb(255, 124, 75);
   cursor: pointer;
   transition: all 0.2s ease;
   letter-spacing: 0.01em;
   white-space: nowrap;
+  min-width: 120px;
+  text-align: center;
 }
 
 .captcha-button:hover:not(:disabled) {
-  background: rgba(245, 98, 43, 0.1);
+  background: rgba(255, 124, 75, 0.1);
 }
 
 .captcha-button:disabled {
@@ -726,7 +717,7 @@ const handleMouseLeave = (e) => {
 .login-button {
   flex: 2;
   padding: 1rem 1.5rem;
-  background: linear-gradient(135deg, #f5622b 0%, #ff8a3d 100%);
+  background: linear-gradient(135deg, rgb(255, 124, 75) 0%, rgb(255, 92, 25) 100%);
   color: white;
   border: none;
   border-radius: 12px;
@@ -734,19 +725,24 @@ const handleMouseLeave = (e) => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 14px rgba(245, 98, 43, 0.35);
+  box-shadow: 0 4px 14px rgba(255, 124, 75, 0.35);
   letter-spacing: 0.01em;
 }
 
+.login-button.full-width {
+  flex: 1;
+  width: 100%;
+}
+
 .login-button:hover:not(:disabled) {
-  background: linear-gradient(135deg, #e65a27 0%, #f5622b 100%);
+  background: linear-gradient(135deg, rgb(255, 92, 25) 0%, rgb(255, 124, 75) 100%);
   box-shadow: 0 6px 20px rgba(245, 98, 43, 0.45);
   transform: translateY(-1px);
 }
 
 .login-button:active:not(:disabled) {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(245, 98, 43, 0.35);
+  box-shadow: 0 2px 8px rgba(255, 124, 75, 0.35);
 }
 
 .login-button:disabled {
@@ -786,6 +782,26 @@ const handleMouseLeave = (e) => {
   color: #ef4444;
   margin-top: 0.5rem;
   text-align: left;
+}
+
+/* 信息提示 */
+.info-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #3b82f6;
+  line-height: 1.5;
+}
+
+.info-message .icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
 }
 
 /* 响应式设计 */
@@ -831,7 +847,7 @@ const handleMouseLeave = (e) => {
 :global(.hover-circle) {
   position: absolute;
   border-radius: 50%;
-  background: rgba(255, 215, 0, 0.3);
+  background: rgba(255, 236, 205, 1);
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: -1;

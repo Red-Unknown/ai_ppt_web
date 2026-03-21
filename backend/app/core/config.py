@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     LOG_BACKUP_COUNT: int = 5
     
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/fwwb_a12"
+    DATABASE_URL: str = "postgresql+psycopg2://postgres:yaoshun2006@10.0.0.4:5432/A12database"
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

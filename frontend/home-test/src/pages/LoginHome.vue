@@ -61,7 +61,7 @@
     <!-- 注册弹窗 -->
     <div v-if="showRegisterPopup" class="popup-overlay" @click="closeRegisterPopup">
       <div class="popup-content" @click.stop>
-        <RegisterPopup @close="closeRegisterPopup" @success="handleRegisterSuccess" />
+        <RegisterPopup @close="closeRegisterPopup" @success="handleRegisterSuccess" @showNamePopup="handleShowNamePopup" />
       </div>
     </div>
     
@@ -71,6 +71,14 @@
         <ForgetPopup @close="closeForgetPopup" @success="handleForgetSuccess" />
       </div>
     </div>
+    
+    <!-- 学生信息采集弹窗 -->
+    <NamePopup 
+      v-if="showNamePopup" 
+      :visible="showNamePopup"
+      @close="closeNamePopup" 
+      @success="handleNamePopupSuccess" 
+    />
   </div>
 </template>
 
@@ -79,11 +87,17 @@ import { ref } from 'vue'
 import LoginPopup from '../components/LoginPopup.vue'
 import RegisterPopup from '../components/RegisterPopup.vue'
 import ForgetPopup from '../components/ForgetPopup.vue'
+import NamePopup from '../components/NamePopup.vue'
+import { useRouter } from 'vue-router'
+
+// 路由实例
+const router = useRouter()
 
 // 状态
 const showLoginPopup = ref(false)
 const showRegisterPopup = ref(false)
 const showForgetPopup = ref(false)
+const showNamePopup = ref(false)
 
 // 返回
 const handleBack = () => {
@@ -108,6 +122,24 @@ const handleLoginSuccess = () => {
 // 处理注册成功
 const handleRegisterSuccess = () => {
   showRegisterPopup.value = false
+}
+
+// 处理显示NamePopup弹窗
+const handleShowNamePopup = () => {
+  showRegisterPopup.value = false
+  showNamePopup.value = true
+}
+
+// 关闭NamePopup弹窗
+const closeNamePopup = () => {
+  showNamePopup.value = false
+}
+
+// 处理NamePopup提交成功
+const handleNamePopupSuccess = () => {
+  showNamePopup.value = false
+  // 学生信息收集成功后跳转到学生页面
+  router.push('/ppt-show')
 }
 
 // 从登录弹窗打开注册弹窗

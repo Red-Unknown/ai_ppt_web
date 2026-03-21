@@ -23,9 +23,10 @@
               v-model="form.identifier"
               type="text"
               class="form-input"
-              placeholder="请输入学号/工号、手机号"
+              :placeholder="errors.identifier || '请输入学号/工号、手机号'"
               @focus="handleInputFocus"
-              @blur="handleInputBlur"
+              @blur="handleInputBlur; validateField('identifier')"
+              :class="{ 'input-error': errors.identifier }"
             />
           </div>
         </div>
@@ -42,9 +43,10 @@
               v-model="form.password"
               type="password"
               class="form-input"
-              placeholder="请输入密码"
+              :placeholder="errors.password || '请输入密码'"
               @focus="handleInputFocus"
-              @blur="handleInputBlur"
+              @blur="handleInputBlur; validateField('password')"
+              :class="{ 'input-error': errors.password }"
             />
           </div>
         </div>
@@ -62,9 +64,10 @@
               v-model="form.captcha"
               type="text"
               class="form-input"
-              placeholder="请输入验证码"
+              :placeholder="errors.captcha || '请输入验证码'"
               @focus="handleInputFocus"
-              @blur="handleInputBlur"
+              @blur="handleInputBlur; validateField('captcha')"
+              :class="{ 'input-error': errors.captcha }"
             />
             <div class="captcha-code" @click="generateCaptcha">
               {{ captchaCode }}
@@ -152,6 +155,13 @@ const form = ref({
   rememberMe: false
 })
 
+// 错误信息
+const errors = ref({
+  identifier: '',
+  password: '',
+  captcha: ''
+})
+
 // 状态
 const isSubmitting = ref(false)
 const captchaCode = ref('')
@@ -183,19 +193,50 @@ const handleInputBlur = (event) => {
   }
 }
 
+// 验证字段
+const validateField = (field) => {
+  switch (field) {
+    case 'identifier':
+      if (!form.value.identifier) {
+        errors.value.identifier = '请输入学号/工号、手机号'
+      } else {
+        errors.value.identifier = ''
+      }
+      break
+    case 'password':
+      if (!form.value.password) {
+        errors.value.password = '请输入密码'
+      } else {
+        errors.value.password = ''
+      }
+      break
+    case 'captcha':
+      if (!form.value.captcha) {
+        errors.value.captcha = '请输入验证码'
+      } else if (form.value.captcha.toUpperCase() !== captchaCode.value) {
+        errors.value.captcha = '验证码错误'
+      } else {
+        errors.value.captcha = ''
+      }
+      break
+  }
+}
+
+// 验证所有字段
+const validateAllFields = () => {
+  validateField('identifier')
+  validateField('password')
+  validateField('captcha')
+  
+  return !errors.value.identifier && !errors.value.password && !errors.value.captcha
+}
+
 // 提交处理
 const handleSubmit = async () => {
   if (isSubmitting.value) return
   
-  // 简单验证
-  if (!form.value.identifier || !form.value.password || !form.value.captcha) {
-    alert('请填写所有字段')
-    return
-  }
-  
-  if (form.value.captcha.toUpperCase() !== captchaCode.value) {
-    alert('验证码错误')
-    generateCaptcha()
+  // 验证所有字段
+  if (!validateAllFields()) {
     return
   }
   
@@ -203,7 +244,7 @@ const handleSubmit = async () => {
   
   try {
     // 调用后端登录API
-    const response = await fetch('http://localhost:8000/api/v1/login/', {
+    const response = await fetch('http://localhost:8000/api/v1/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -214,9 +255,8 @@ const handleSubmit = async () => {
       })
     })
     
-    const data = await response.json()
-    
-    if (data.success) {
+    if (response.ok) {
+      const data = await response.json()
       console.log('登录成功', data)
       
       // 保存登录状态
@@ -227,8 +267,8 @@ const handleSubmit = async () => {
       }
       
       // 保存会话ID
-      localStorage.setItem('session_id', data.data.session_id)
-      localStorage.setItem('user_info', JSON.stringify(data.data.user))
+      localStorage.setItem('session_id', data.session_id)
+      localStorage.setItem('user_info', JSON.stringify(data.user))
       
       alert('登录成功！')
       
@@ -236,13 +276,14 @@ const handleSubmit = async () => {
       emit('success')
       
       // 根据用户角色跳转到不同页面
-      if (data.data.user.role === 'teacher') {
+      if (data.user.role === 'teacher') {
         router.push('/ppt-show2')
       } else {
         router.push('/ppt-show')
       }
     } else {
-      alert(`登录失败: ${data.error}`)
+      const errorData = await response.json()
+      alert(`登录失败: ${errorData.detail || '用户名或密码错误'}`)
     }
   } catch (error) {
     console.error('登录失败', error)
@@ -281,60 +322,93 @@ const handleRegisterSuccess = () => {
 generateCaptcha()
 
 // 鼠标悬停特效
-const loginCard = ref(null)
-let hoverCircle = null
-let isAnimating = false
+const hoverCircle = ref(null)
+const isAnimating = ref(false)
+const animationTimer = ref(null)
 
-// 鼠标进入事件
-const handleMouseEnter = (e) => {
-  if (isAnimating) return
+// 动画配置
+const animationConfig = {
+  duration: 400, // 动画时长，符合300-500ms要求
+  easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)' // 缓动函数，提供自然的动画效果
+}
+
+// 防抖函数
+const debounce = (func, wait) => {
+  let timeout
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout)
+      func(...args)
+    }
+    clearTimeout(timeout)
+    timeout = setTimeout(later, wait)
+  }
+}
+
+// 鼠标进入事件（防抖处理）
+const handleMouseEnter = debounce((e) => {
+  if (isAnimating.value) return
   
-  // 计算鼠标在容器内的位置
+  // 计算鼠标在容器内的位置（精准捕获，误差不超过2px）
   const rect = e.target.getBoundingClientRect()
-  const x = e.clientX - rect.left
-  const y = e.clientY - rect.top
+  const x = Math.round(e.clientX - rect.left)
+  const y = Math.round(e.clientY - rect.top)
+  
+  // 清除之前的动画
+  if (hoverCircle.value) {
+    if (hoverCircle.value.parentNode) {
+      hoverCircle.value.parentNode.removeChild(hoverCircle.value)
+    }
+    hoverCircle.value = null
+  }
   
   // 创建圆形元素
   const circle = document.createElement('div')
-  circle.className = 'hover-circle in'
+  circle.className = 'hover-circle in student-theme'
   circle.style.left = x + 'px'
   circle.style.top = y + 'px'
   
   e.target.appendChild(circle)
-  hoverCircle = circle
-  isAnimating = true
+  hoverCircle.value = circle
+  isAnimating.value = true
   
   // 动画结束后重置状态
-  setTimeout(() => {
-    isAnimating = false
-  }, 500)
-}
+  if (animationTimer.value) {
+    clearTimeout(animationTimer.value)
+  }
+  animationTimer.value = setTimeout(() => {
+    isAnimating.value = false
+  }, animationConfig.duration)
+}, 50)
 
 // 鼠标离开事件
-const handleMouseLeave = (e) => {
-  if (isAnimating || !hoverCircle) return
+const handleMouseLeave = debounce((e) => {
+  if (isAnimating.value || !hoverCircle.value) return
   
-  // 计算鼠标离开时的位置
+  // 计算鼠标离开时的位置（精准捕获，误差不超过2px）
   const rect = e.target.getBoundingClientRect()
-  const x = e.clientX - rect.left
-  const y = e.clientY - rect.top
+  const x = Math.round(e.clientX - rect.left)
+  const y = Math.round(e.clientY - rect.top)
   
   // 应用离开动画
-  hoverCircle.className = 'hover-circle out'
-  hoverCircle.style.left = x + 'px'
-  hoverCircle.style.top = y + 'px'
+  hoverCircle.value.className = 'hover-circle out student-theme'
+  hoverCircle.value.style.left = x + 'px'
+  hoverCircle.value.style.top = y + 'px'
   
-  isAnimating = true
+  isAnimating.value = true
   
   // 动画结束后移除元素
-  setTimeout(() => {
-    if (hoverCircle && hoverCircle.parentNode) {
-      hoverCircle.parentNode.removeChild(hoverCircle)
+  if (animationTimer.value) {
+    clearTimeout(animationTimer.value)
+  }
+  animationTimer.value = setTimeout(() => {
+    if (hoverCircle.value && hoverCircle.value.parentNode) {
+      hoverCircle.value.parentNode.removeChild(hoverCircle.value)
     }
-    hoverCircle = null
-    isAnimating = false
-  }, 500)
-}
+    hoverCircle.value = null
+    isAnimating.value = false
+  }, animationConfig.duration)
+}, 50)
 </script>
 
 <style scoped>
@@ -344,11 +418,10 @@ const handleMouseLeave = (e) => {
   z-index: 3;
   width: 100%;
   max-width: 400px;
-  background: rgba(255, 255, 255, 1);
-  backdrop-filter: blur(24px);
+  background: #FFFFFF;
   border-radius: 20px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 1);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  border: 1px solid #E2E8F0;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
@@ -375,10 +448,11 @@ const handleMouseLeave = (e) => {
 .login-title {
   font-size: 1.875rem;
   font-weight: 700;
-  color: #f5622b;
+  color: rgb(255, 124, 75);
   margin-bottom: 0.5rem;
   line-height: 1.3;
   letter-spacing: -0.02em;
+  transition: color 0.3s ease;
 }
 
 .login-subtitle {
@@ -404,18 +478,17 @@ const handleMouseLeave = (e) => {
 .input-wrapper {
   position: relative;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: white;
+  border: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
 
 /* 输入框聚焦效果 */
 .input-wrapper.input-focused {
-  border-color: rgba(255, 255, 255, 1);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.7);
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.1);
+  border: 1px solid #94a3b8;
 }
 
 /* 输入框图标 */
@@ -438,7 +511,7 @@ const handleMouseLeave = (e) => {
   width: 100%;
   padding: 1rem 1rem 1rem 3rem;
   border: none;
-  background: rgba(255, 255, 255, 0.8);
+  background: white;
   font-size: 0.9375rem;
   color: #1e293b;
   outline: none;
@@ -451,34 +524,46 @@ const handleMouseLeave = (e) => {
   letter-spacing: 0.01em;
 }
 
+.form-input.input-error::placeholder {
+  color: #ef4444;
+}
+
+.form-input.input-error {
+  border-color: #ef4444;
+}
+
 /* 验证码包装器 */
 .captcha-wrapper {
   display: flex;
   align-items: center;
+  width: 100%;
 }
 
 /* 验证码输入框 */
 .captcha-wrapper .form-input {
   flex: 1;
   padding-right: 1rem;
+  min-width: 0;
 }
 
 /* 验证码显示 */
 .captcha-code {
   padding: 1rem 1.25rem;
-  background: rgba(245, 98, 43, 0.1);
+  background: rgba(255, 124, 75, 0.1);
   border-left: 1px solid rgba(255, 255, 255, 0.3);
   font-size: 0.875rem;
   font-weight: 600;
-  color: #f5622b;
+  color: rgb(255, 124, 75);
   cursor: pointer;
   transition: all 0.2s ease;
   letter-spacing: 0.2em;
   user-select: none;
+  min-width: 100px;
+  text-align: center;
 }
 
 .captcha-code:hover {
-  background: rgba(245, 98, 43, 0.15);
+  background: rgba(255, 124, 75, 0.15);
 }
 
 /* 表单选项 */
@@ -514,8 +599,8 @@ const handleMouseLeave = (e) => {
 }
 
 .checkbox-input:checked + .checkbox-custom {
-  background: #f5622b;
-  border-color: #f5622b;
+  background: rgb(255, 124, 75);
+  border-color: rgb(255, 124, 75);
 }
 
 .checkbox-input:checked + .checkbox-custom::after {
@@ -539,7 +624,7 @@ const handleMouseLeave = (e) => {
 /* 链接按钮 */
 .link-button {
   font-size: 0.875rem;
-  color: #f5622b;
+  color: rgb(255, 124, 75);
   background: none;
   border: none;
   cursor: pointer;
@@ -550,7 +635,7 @@ const handleMouseLeave = (e) => {
 }
 
 .link-button:hover {
-  color: #e65a27;
+  color: rgb(255, 92, 25);
   text-decoration: underline;
 }
 
@@ -558,7 +643,7 @@ const handleMouseLeave = (e) => {
 .login-button {
   width: 100%;
   padding: 1rem 1.5rem;
-  background: linear-gradient(135deg, #f5622b 0%, #ff8a3d 100%);
+  background: #FF7C4B;
   color: white;
   border: none;
   border-radius: 12px;
@@ -566,20 +651,23 @@ const handleMouseLeave = (e) => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 14px rgba(245, 98, 43, 0.35);
   letter-spacing: 0.01em;
   margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 
 .login-button:hover:not(:disabled) {
-  background: linear-gradient(135deg, #e65a27 0%, #f5622b 100%);
-  box-shadow: 0 6px 20px rgba(245, 98, 43, 0.45);
+  background: #FF6B35;
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 124, 75, 0.3);
 }
 
 .login-button:active:not(:disabled) {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(245, 98, 43, 0.35);
+  box-shadow: 0 2px 8px rgba(255, 124, 75, 0.35);
 }
 
 .login-button:disabled {
@@ -621,6 +709,7 @@ const handleMouseLeave = (e) => {
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
+  flex-wrap: wrap;
 }
 
 .register-text {
@@ -632,7 +721,7 @@ const handleMouseLeave = (e) => {
 
 .register-link {
   font-size: 0.875rem;
-  color: #f5622b;
+  color: rgb(255, 124, 75);
   background: none;
   border: none;
   cursor: pointer;
@@ -643,7 +732,7 @@ const handleMouseLeave = (e) => {
 }
 
 .register-link:hover {
-  color: #e65a27;
+  color: rgb(255, 92, 25);
   text-decoration: underline;
 }
 
@@ -686,44 +775,54 @@ const handleMouseLeave = (e) => {
 :global(.hover-circle) {
   position: absolute;
   border-radius: 50%;
-  background: rgba(255, 215, 0, 0.3);
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: -1;
-  will-change: transform, width, height;
+  will-change: transform, scale, opacity;
+  /* 使用CSS硬件加速 */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
 }
 
 :global(.hover-circle.in) {
   width: 10px;
   height: 10px;
-  animation: hoverIn 0.5s ease-out forwards;
+  opacity: 1;
+  animation: hoverIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
 :global(.hover-circle.out) {
   width: 1200px;
   height: 1200px;
-  animation: hoverOut 0.5s ease-in forwards;
+  opacity: 1;
+  animation: hoverOut 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* 学生角色颜色 - 透明度为1 */
+:global(.hover-circle.student-theme) {
+  background: rgba(255, 236, 205, 1); /* 学生主题色，透明度为1 */
 }
 
 @keyframes hoverIn {
   0% {
-    width: 10px;
-    height: 10px;
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0.5;
   }
   100% {
-    width: 1200px;
-    height: 1200px;
+    transform: translate(-50%, -50%) scale(300); /* 增大缩放比例，确保完全覆盖整个卡片 */
+    opacity: 0.1;
   }
 }
 
 @keyframes hoverOut {
   0% {
-    width: 1200px;
-    height: 1200px;
+    transform: translate(-50%, -50%) scale(300);
+    opacity: 0.1;
   }
   100% {
-    width: 0;
-    height: 0;
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
   }
 }
 
