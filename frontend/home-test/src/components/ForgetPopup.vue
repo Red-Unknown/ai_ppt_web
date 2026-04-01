@@ -790,11 +790,11 @@ const handleMouseLeave = (e) => {
   align-items: center;
   gap: 0.5rem;
   padding: 1rem;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: white;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   font-size: 0.875rem;
-  color: #3b82f6;
+  color: #64748b;
   line-height: 1.5;
 }
 

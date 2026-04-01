@@ -1,6 +1,13 @@
 <template>
   <div class="login-card" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave">
     <div class="card-content">
+      <!-- 临时导航按钮 - 后期需删除 -->
+      <button class="temp-skip-button" @click="handleSkipRegister">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12h14"></path>
+          <path d="m12 5 7 7-7 7"></path>
+        </svg>
+      </button>
 
       
       <!-- 标题 -->
@@ -534,6 +541,25 @@ const handleRoleClick = (e, role) => {
     validateField('idNumber')
   }
 }
+
+// 临时跳过注册处理函数 - 后期需删除
+const handleSkipRegister = () => {
+  // 模拟登录状态
+  localStorage.setItem('session_id', 'temp-session')
+  localStorage.setItem('userRole', selectedRole.value)
+  localStorage.setItem('userId', 'temp-user')
+  localStorage.setItem('user_info', JSON.stringify({ username: '临时用户', role: selectedRole.value }))
+  
+  // 通知父组件注册成功
+  emit('success')
+  
+  // 根据角色跳转到对应页面
+  if (selectedRole.value === 'teacher') {
+    router.push('/ppt-show2')
+  } else {
+    router.push('/ppt-show')
+  }
+}
 </script>
 
 <style scoped>
@@ -728,11 +754,11 @@ const handleRoleClick = (e, role) => {
   align-items: center;
   gap: 0.5rem;
   padding: 1rem;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: white;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   font-size: 0.875rem;
-  color: #3b82f6;
+  color: #64748b;
   line-height: 1.5;
 }
 
@@ -1004,6 +1030,37 @@ const handleRoleClick = (e, role) => {
   padding: 2.5rem;
   position: relative;
   z-index: 1;
+}
+
+/* 临时跳过按钮样式 - 后期需删除 */
+.temp-skip-button {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background-color: #f8fafc;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #94a3b8;
+  font-size: 0.875rem;
+  z-index: 10;
+}
+
+.temp-skip-button:hover {
+  background-color: #e2e8f0;
+  color: #64748b;
+  transform: scale(1.05);
+}
+
+.temp-skip-button .icon {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 /* 减少动画偏好 */
