@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     # Web Search Configuration
     TAVILY_API_KEY: str = ""
 
+    # Kimi Configuration (for built-in web search)
+    KIMI_API_KEY: str = ""
+    KIMI_BASE_URL: str = "https://api.moonshot.cn/v1"
+    KIMI_MODEL: str = "moonshot-v1-8k"
+    KIMI_MAX_TOKENS: int = 8000
+    KIMI_TEMPERATURE: float = 0.7
+
     # Feature Flags
     ENABLE_SUGGESTIONS: bool = True
 

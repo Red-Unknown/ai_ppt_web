@@ -11,7 +11,7 @@
 | **`script/`** | **Role C (智课生成)** | 生成讲稿、TTS 合成、数字人/视频合成。 |
 | **`qa/`** | **Role D (问答互动)** | RAG 检索、上下文管理、多轮对话状态机。 |
 | **`session/`** | **Role D (进度控制)** | 学习进度追踪、断点续接策略、理解度分析。 |
-| **`integration/`** | **Role E (集成适配)** | 泛雅 API 适配、鉴权 (Auth)、外部接口防腐层。 |
+| **`integration/`** | **Role E (集成适配)** | 泛雅 API 适配、鉴权 (Auth)、外部接口防腐层。 | 
 
 ### 6.2 目录结构规范 (Directory Layout)
 

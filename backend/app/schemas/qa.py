@@ -13,7 +13,7 @@ class ChatRequest(BaseModel):
     current_path: Optional[str] = Field(None, description="Current learning path, e.g., /chapter1/section2")
     top_k: int = Field(3, description="Number of results to retrieve")
     session_id: Optional[str] = Field(None, description="Session ID for conversation history")
-    model: Optional[str] = Field("deepseek", description="Model to use: deepseek, gpt-4o")
+    model: Optional[str] = Field("deepseek", description="Model to use: deepseek, kimi, gpt-4o")
     prompt_style: Optional[str] = Field("default", description="Prompt style: default, creative, socratic")
     video_timestamp: Optional[float] = Field(None, description="Current video playback timestamp in seconds for resume anchor")
     enable_reasoning: bool = Field(False, description="Enable dual-stream reasoning (Quick Answer + Deep Thinking)")

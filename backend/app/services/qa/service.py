@@ -103,6 +103,7 @@ class QAService:
     def _init_llm(self):
         """Initialize LLM clients with current settings."""
         self.llm_clients = {}
+        
         # Initialize DeepSeek Clients (Default)
         for scenario, config in self.SCENARIO_CONFIGS.items():
             model_name = settings.DEEPSEEK_MODEL
@@ -117,10 +118,22 @@ class QAService:
                 max_tokens=config.get("max_tokens", settings.DEEPSEEK_MAX_TOKENS),
                 streaming=True,
                 max_retries=3,
-                # Pass extra_body directly as keyword argument, not nested in model_kwargs
                 extra_body={"include_reasoning": True} if scenario == "reasoner" else None
             )
 
+        # Initialize Kimi Clients (for tool calling with web search)
+        if settings.KIMI_API_KEY:
+            for scenario, config in self.SCENARIO_CONFIGS.items():
+                self.llm_clients[f"{scenario}_kimi"] = ChatOpenAI(
+                    model=settings.KIMI_MODEL,
+                    api_key=settings.KIMI_API_KEY,
+                    base_url=settings.KIMI_BASE_URL,
+                    temperature=config.get("temperature", settings.KIMI_TEMPERATURE),
+                    max_tokens=config.get("max_tokens", settings.KIMI_MAX_TOKENS),
+                    streaming=True,
+                    max_retries=3
+                )
+            logger.info("Kimi LLM clients initialized for tool calling.")
             
         # Initialize GPT Clients (if available)
         if settings.OPENAI_API_KEY:
@@ -133,19 +146,33 @@ class QAService:
                     streaming=True
                 )
         
-        # Default LLM
+        # Default LLM (can be switched via parameter)
         self.llm = self.llm_clients["qa"]
 
-    def _init_agent(self):
-        """Initialize ReAct Agent with skills."""
+    def _init_agent(self, llm_key: str = "qa"):
+        """Initialize ReAct Agent with skills.
+        
+        Args:
+            llm_key: Key to select LLM from llm_clients dict. 
+                     Options: "qa" (DeepSeek), "qa_kimi", "qa_gpt"
+        """
+        # Select LLM (default to "qa" if key not found)
+        llm = self.llm_clients.get(llm_key, self.llm_clients["qa"])
+        
         # 1. Local Knowledge Tool (Enhanced RAG)
-        local_rag = LocalKnowledgeTool(retriever=self.retriever, llm=self.llm_clients["qa"])
+        local_rag = LocalKnowledgeTool(retriever=self.retriever, llm=llm)
         
         # 2. Get other skills from SkillManager
+        # Note: When using Kimi, web_search skill is not needed as Kimi has built-in search
         other_skills = list(self.skill_manager.skills.values())
         
         # Combine tools
-        tools = [local_rag] + other_skills
+        # For Kimi: Don't add web_search tool (Kimi will decide internally)
+        # For DeepSeek/GPT: Add web_search tool for Tavily integration
+        if "kimi" in llm_key.lower():
+            tools = [local_rag]  # Kimi has built-in web search
+        else:
+            tools = [local_rag] + other_skills  # Include Tavily web search
         
         # Get System Prompt
         system_prompt = prompt_loader.get_prompt("v5_enhanced_zh", "system")
@@ -158,12 +185,12 @@ class QAService:
 
         # Create Agent
         self.agent = ReActAgent(
-            llm=self.llm_clients["qa"],
+            llm=llm,
             tools=tools,
             max_iterations=15,
             system_prompt=system_prompt
         )
-        logger.info(f"ReAct Agent initialized with tools: {[t.name for t in tools]}")
+        logger.info(f"ReAct Agent initialized with tools: {[t.name for t in tools]} using LLM: {llm_key}")
 
     def reload_config(self):
         """Hot reload configuration (re-initialize LLMs)."""
@@ -318,10 +345,28 @@ class QAService:
     async def stream_answer_question(self, request: ChatRequest, user_id: str = "student_001") -> AsyncGenerator[str, None]:
         """
         Stream response for WebSocket using Server-Sent Events style JSON chunks.
+        
+        Args:
+            request: Chat request with model parameter (deepseek, kimi, gpt-4o)
+            user_id: User identifier
         """
         # Set ContextVar for session_id to ensure tools can access it safely
         with AppContext.scope(session_id=request.session_id, user_id=user_id):
             try:
+                # Select LLM based on model parameter
+                model_lower = request.model.lower() if request.model else "deepseek"
+                if "kimi" in model_lower:
+                    llm_key = "qa_kimi"
+                elif "gpt" in model_lower:
+                    llm_key = "qa_gpt"
+                else:
+                    llm_key = "qa"  # Default to DeepSeek
+                
+                # Re-initialize agent with selected LLM if needed
+                if not hasattr(self, 'current_llm_key') or self.current_llm_key != llm_key:
+                    self._init_agent(llm_key)
+                    self.current_llm_key = llm_key
+                
                 # 0. Reset Search Quota for this new turn (Single Session = One Q&A Pair)
                 if request.session_id:
                     SessionManager.reset_search_quota(request.session_id)
