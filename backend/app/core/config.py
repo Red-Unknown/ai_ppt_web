@@ -1,9 +1,7 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Dict, Any
 from pathlib import Path
 
-# Calculate Project Root
-# backend/app/core/config.py -> backend/app/core -> backend/app -> backend -> project_root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 class Settings(BaseSettings):
@@ -13,20 +11,33 @@ class Settings(BaseSettings):
     
     ALLOWED_HOSTS: List[str] = ["*"]
 
-    # Paths
     BASE_DIR: Path = PROJECT_ROOT
     
-    # Logging Configuration
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
-    LOG_FILE_MAX_SIZE: int = 1  # MB
+    LOG_FILE_MAX_SIZE: int = 1
     LOG_BACKUP_COUNT: int = 5
     LOG_DIR: Path = PROJECT_ROOT / "log"
     
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:yaoshun2006@10.0.0.4:5432/A12database"
+    DB_CONFIG: Dict[str, Any] = {
+        "host": "10.0.0.4",
+        "port": 5432,
+        "user": "postgres",
+        "password": "yaoshun2006",
+        "timeout": 5,
+        "ssl": False,
+    }
     
-    # Redis
+    TARGET_DB: str = "ai_ppt_web"
+    
+    DATABASE_URL: str = ""
+    
+    @property
+    def DATABASE_URL(self) -> str:
+        if self.DB_CONFIG.get("host"):
+            return f"postgresql+asyncpg://{self.DB_CONFIG['user']}:{self.DB_CONFIG['password']}@{self.DB_CONFIG['host']}:{self.DB_CONFIG['port']}/{self.TARGET_DB}"
+        return ""
+    
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # DeepSeek Configuration

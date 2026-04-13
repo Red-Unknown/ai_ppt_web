@@ -16,30 +16,37 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# 创建同步引擎（使用 psycopg2）
-# 将 asyncpg URL 转换为 psycopg2 URL
-DATABASE_URL_SYNC = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+def _build_database_url() -> str:
+    db_config = settings.DB_CONFIG
+    target_db = settings.TARGET_DB
+    protocol = "postgresql+asyncpg" if not db_config.get("ssl") else "postgresql+asyncpg"
+    return f"{protocol}://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{target_db}"
+
+DATABASE_URL = _build_database_url()
+DATABASE_URL_SYNC = DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+
+db_config = settings.DB_CONFIG
+timeout = db_config.get("timeout", 5)
 
 engine = create_engine(
     DATABASE_URL_SYNC,
-    pool_pre_ping=True,  # 自动检测断开的连接
+    pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
-    echo=settings.DEBUG  # 调试模式下打印 SQL
+    pool_recycle=3600,
+    connect_args={
+        "connect_timeout": timeout,
+        "options": "-c statement_timeout={}000".format(timeout)
+    },
+    echo=settings.DEBUG
 )
 
-# 创建 SessionLocal 类
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# 创建 Base 类，用于 ORM Model 继承
 Base = declarative_base()
 
 
 def get_db() -> Generator[Session, None, None]:
-    """
-    依赖注入函数，用于 FastAPI 的 Depends
-    使用方式: db: Session = Depends(get_db)
-    """
     db = SessionLocal()
     try:
         yield db
@@ -48,12 +55,7 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """
-    初始化数据库，创建所有表
-    注意：生产环境建议使用 Alembic 迁移
-    """
     try:
-        # 导入所有模型以确保它们被注册到 Base.metadata
         from backend.app.models import (
             User,
             CourseCategory,
@@ -71,11 +73,6 @@ def init_db() -> None:
 
 
 def check_db_connection() -> bool:
-    """
-    检查数据库连接是否正常
-    Returns:
-        bool: 连接成功返回 True，否则返回 False
-    """
     try:
         from sqlalchemy import text
         with engine.connect() as conn:
@@ -84,3 +81,13 @@ def check_db_connection() -> bool:
     except Exception as e:
         logger.error(f"Database connection check failed: {e}")
         return False
+
+
+def get_pool_status() -> dict:
+    return {
+        "pool_size": engine.pool.size(),
+        "checked_in": engine.pool.checkedin(),
+        "checked_out": engine.pool.checkedout(),
+        "overflow": engine.pool.overflow(),
+        "invalid": engine.pool.invalidatedcount() if hasattr(engine.pool, 'invalidatedcount') else 0
+    }
