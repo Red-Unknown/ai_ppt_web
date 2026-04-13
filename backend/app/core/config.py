@@ -30,14 +30,6 @@ class Settings(BaseSettings):
     
     TARGET_DB: str = "ai_ppt_web"
     
-    DATABASE_URL: str = ""
-    
-    @property
-    def DATABASE_URL(self) -> str:
-        if self.DB_CONFIG.get("host"):
-            return f"postgresql+asyncpg://{self.DB_CONFIG['user']}:{self.DB_CONFIG['password']}@{self.DB_CONFIG['host']}:{self.DB_CONFIG['port']}/{self.TARGET_DB}"
-        return ""
-    
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # DeepSeek Configuration
@@ -66,5 +58,12 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
+
+    @property
+    def DATABASE_URL(self) -> str:
+        if self.DB_CONFIG.get("host"):
+            return f"postgresql+asyncpg://{self.DB_CONFIG['user']}:{self.DB_CONFIG['password']}@{self.DB_CONFIG['host']}:{self.DB_CONFIG['port']}/{self.TARGET_DB}"
+        return ""
 
 settings = Settings()
