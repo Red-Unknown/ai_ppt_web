@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import check_db_connection
 from app.api.v1.endpoints.script import router as script_router
+from app.api.v1.endpoints.async_tts import router as async_tts_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ app.add_middleware(
 )
 
 app.include_router(script_router, prefix="/api/v1")
+app.include_router(async_tts_router, prefix="/api/v1")
 
 @app.get("/")
 def root():
