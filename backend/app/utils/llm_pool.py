@@ -33,6 +33,10 @@ class PoolExhaustedError(PoolError):
     pass
 
 
+class LLMConfigurationError(PoolError):
+    pass
+
+
 @dataclass
 class LLMPoolConfig:
     max_connections: int = 20
@@ -119,6 +123,39 @@ class LLMPool:
                     "base_url": None,
                 }
 
+        if settings.QWEN_API_KEY:
+            self._scenario_configs["qwen"] = {
+                "model": settings.QWEN_MODEL,
+                "temperature": settings.QWEN_TEMPERATURE,
+                "max_tokens": settings.QWEN_MAX_TOKENS,
+                "api_key": settings.QWEN_API_KEY,
+                "base_url": settings.QWEN_BASE_URL,
+            }
+            self._scenario_configs["qwen_vision"] = {
+                "model": settings.QWEN_VISION_MODEL,
+                "temperature": settings.QWEN_TEMPERATURE,
+                "max_tokens": settings.QWEN_MAX_TOKENS,
+                "api_key": settings.QWEN_API_KEY,
+                "base_url": settings.QWEN_BASE_URL,
+                "vision": True,
+            }
+            for scenario in ["qa", "reasoner", "summary", "translation"]:
+                self._scenario_configs[f"{scenario}_qwen"] = {
+                    "model": settings.QWEN_MODEL,
+                    "temperature": self._scenario_configs[scenario]["temperature"],
+                    "max_tokens": settings.QWEN_MAX_TOKENS,
+                    "api_key": settings.QWEN_API_KEY,
+                    "base_url": settings.QWEN_BASE_URL,
+                }
+                self._scenario_configs[f"{scenario}_qwen_vision"] = {
+                    "model": settings.QWEN_VISION_MODEL,
+                    "temperature": self._scenario_configs[scenario]["temperature"],
+                    "max_tokens": settings.QWEN_MAX_TOKENS,
+                    "api_key": settings.QWEN_API_KEY,
+                    "base_url": settings.QWEN_BASE_URL,
+                    "vision": True,
+                }
+
         logger.info(f"LLMPool initialized with config: max_connections={self.config.max_connections}, "
                    f"min_idle={self.config.min_idle_connections}, timeout={self.config.connection_timeout}")
 
@@ -128,15 +165,35 @@ class LLMPool:
         
         config = self._scenario_configs[scenario]
         
-        client = ChatOpenAI(
-            model=config["model"],
-            api_key=config["api_key"],
-            base_url=config["base_url"],
-            temperature=config["temperature"],
-            max_tokens=config["max_tokens"],
-            streaming=True,
-            max_retries=self.config.max_retries,
-        )
+        api_key = config.get("api_key")
+        if not api_key:
+            raise LLMConfigurationError(
+                f"API key not configured for scenario: {scenario}. "
+                f"Please set the appropriate environment variable (e.g., QWEN_API_KEY)."
+            )
+        
+        is_vision = config.get("vision", False)
+        
+        if is_vision and "qwen" in scenario.lower() and "vl" in config.get("model", "").lower():
+            client = ChatOpenAI(
+                model=config["model"],
+                api_key=api_key,
+                base_url=config["base_url"],
+                temperature=config["temperature"],
+                max_tokens=config["max_tokens"],
+                streaming=True,
+                max_retries=self.config.max_retries,
+            )
+        else:
+            client = ChatOpenAI(
+                model=config["model"],
+                api_key=api_key,
+                base_url=config["base_url"],
+                temperature=config["temperature"],
+                max_tokens=config["max_tokens"],
+                streaming=True,
+                max_retries=self.config.max_retries,
+            )
         
         logger.debug(f"Created new LLM client for scenario: {scenario}")
         return client
@@ -415,9 +472,29 @@ def initialize_pool(config: Optional[LLMPoolConfig] = None) -> None:
     pool.initialize()
 
 
-def get_llm_client(scenario: str = "qa", timeout: Optional[float] = None) -> BaseChatModel:
+def get_llm_client(scenario: str = "qa", timeout: Optional[float] = None, model: Optional[str] = None) -> BaseChatModel:
     pool = get_global_pool()
+    if model is not None:
+        scenario = _resolve_model_to_scenario(model, scenario)
     return pool.get_client(scenario=scenario, timeout=timeout)
+
+
+def _resolve_model_to_scenario(model: str, default_scenario: str = "qa") -> str:
+    model_lower = model.lower().strip()
+    
+    if model_lower in ("qwen", "qwen-turbo", "qwen-plus"):
+        return "qwen"
+    elif model_lower in ("qwen-vl", "qwen-vl-plus", "qwen-vl-max", "qwen_vision"):
+        return "qwen_vision"
+    elif model_lower in ("deepseek", "deepseek-chat"):
+        return default_scenario
+    elif model_lower in ("gpt", "gpt-4", "gpt-4o"):
+        return f"{default_scenario}_gpt"
+    elif model_lower in ("kimi", "moonshot"):
+        return f"{default_scenario}_kimi"
+    else:
+        supported_models = ["qwen", "qwen-vl", "deepseek", "gpt", "kimi"]
+        raise ValueError(f"Unsupported model: {model}. Supported models: {supported_models}")
 
 
 def release_llm_client(client: BaseChatModel) -> None:
@@ -436,13 +513,14 @@ def shutdown_pool() -> None:
 
 
 class LLMPoolContext:
-    def __init__(self, scenario: str = "qa", timeout: Optional[float] = None):
+    def __init__(self, scenario: str = "qa", timeout: Optional[float] = None, model: Optional[str] = None):
         self.scenario = scenario
         self.timeout = timeout
+        self.model = model
         self.client: Optional[BaseChatModel] = None
     
     def __enter__(self) -> BaseChatModel:
-        self.client = get_llm_client(self.scenario, self.timeout)
+        self.client = get_llm_client(self.scenario, self.timeout, self.model)
         return self.client
     
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
