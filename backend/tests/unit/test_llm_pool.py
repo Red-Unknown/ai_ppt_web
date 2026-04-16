@@ -17,6 +17,7 @@ from backend.app.utils.llm_pool import (
     PoolStatus,
     PoolError,
     PoolTimeoutError,
+    LLMConfigurationError,
     get_global_pool,
     initialize_pool,
     get_llm_client,
@@ -24,6 +25,7 @@ from backend.app.utils.llm_pool import (
     get_pool_status,
     shutdown_pool,
     LLMPoolContext,
+    _resolve_model_to_scenario,
 )
 
 
@@ -356,6 +358,194 @@ class TestHealthCheck:
                 
                 assert "qa" in result
                 pool.shutdown()
+
+
+class TestQwenSupport:
+    def test_resolve_model_to_scenario_qwen(self):
+        assert _resolve_model_to_scenario("qwen") == "qwen"
+        assert _resolve_model_to_scenario("qwen-turbo") == "qwen"
+        assert _resolve_model_to_scenario("qwen-plus") == "qwen"
+
+    def test_resolve_model_to_scenario_qwen_vision(self):
+        assert _resolve_model_to_scenario("qwen-vl") == "qwen_vision"
+        assert _resolve_model_to_scenario("qwen-vl-plus") == "qwen_vision"
+        assert _resolve_model_to_scenario("qwen-vl-max") == "qwen_vision"
+        assert _resolve_model_to_scenario("qwen_vision") == "qwen_vision"
+
+    def test_resolve_model_to_scenario_deepseek(self):
+        assert _resolve_model_to_scenario("deepseek") == "qa"
+        assert _resolve_model_to_scenario("deepseek-chat") == "qa"
+        assert _resolve_model_to_scenario("deepseek", "reasoner") == "reasoner"
+
+    def test_resolve_model_to_scenario_gpt(self):
+        assert _resolve_model_to_scenario("gpt") == "qa_gpt"
+        assert _resolve_model_to_scenario("gpt-4") == "qa_gpt"
+        assert _resolve_model_to_scenario("gpt-4o") == "qa_gpt"
+
+    def test_resolve_model_to_scenario_kimi(self):
+        assert _resolve_model_to_scenario("kimi") == "qa_kimi"
+        assert _resolve_model_to_scenario("moonshot") == "qa_kimi"
+
+    def test_resolve_model_to_scenario_unsupported(self):
+        with pytest.raises(ValueError, match="Unsupported model"):
+            _resolve_model_to_scenario("unknown-model")
+
+        with pytest.raises(ValueError, match="Supported models"):
+            _resolve_model_to_scenario("claude")
+
+
+class TestQwenConfiguration:
+    def test_qwen_config_in_pool(self):
+        config = LLMPoolConfig(max_connections=5, min_idle_connections=1)
+        with patch("backend.app.utils.llm_pool.settings") as mock_settings:
+            mock_settings.DEEPSEEK_API_KEY = "test-key"
+            mock_settings.DEEPSEEK_MODEL = "deepseek-chat"
+            mock_settings.DEEPSEEK_REASONER_MODEL = "deepseek-reasoner"
+            mock_settings.DEEPSEEK_MAX_TOKENS = 4000
+            mock_settings.DEEPSEEK_TEMPERATURE = 0.7
+            mock_settings.DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+            mock_settings.KIMI_API_KEY = ""
+            mock_settings.OPENAI_API_KEY = ""
+            mock_settings.KIMI_MODEL = "moonshot-v1-8k"
+            mock_settings.KIMI_BASE_URL = "https://api.moonshot.cn/v1"
+            mock_settings.KIMI_MAX_TOKENS = 8000
+            mock_settings.KIMI_TEMPERATURE = 0.7
+            mock_settings.QWEN_API_KEY = "qwen-test-key"
+            mock_settings.QWEN_MODEL = "qwen-turbo"
+            mock_settings.QWEN_VISION_MODEL = "qwen-vl-plus"
+            mock_settings.QWEN_MAX_TOKENS = 2000
+            mock_settings.QWEN_TEMPERATURE = 0.7
+            mock_settings.QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+            pool = LLMPool(config)
+            assert "qwen" in pool._scenario_configs
+            assert "qwen_vision" in pool._scenario_configs
+            assert "qa_qwen" in pool._scenario_configs
+            assert "qa_qwen_vision" in pool._scenario_configs
+
+            assert pool._scenario_configs["qwen"]["model"] == "qwen-turbo"
+            assert pool._scenario_configs["qwen_vision"]["model"] == "qwen-vl-plus"
+            assert pool._scenario_configs["qwen_vision"].get("vision") is True
+
+
+class TestBackwardCompatibility:
+    def test_get_llm_client_without_model_param(self):
+        import backend.app.utils.llm_pool as llm_pool_module
+        
+        original_pool = llm_pool_module._global_pool
+        llm_pool_module._global_pool = None
+        
+        try:
+            config = LLMPoolConfig(max_connections=5, min_idle_connections=1)
+            with patch("backend.app.utils.llm_pool.settings") as mock_settings:
+                mock_settings.DEEPSEEK_API_KEY = "test-key"
+                mock_settings.DEEPSEEK_MODEL = "deepseek-chat"
+                mock_settings.DEEPSEEK_REASONER_MODEL = "deepseek-reasoner"
+                mock_settings.DEEPSEEK_MAX_TOKENS = 4000
+                mock_settings.DEEPSEEK_TEMPERATURE = 0.7
+                mock_settings.DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+                mock_settings.KIMI_API_KEY = ""
+                mock_settings.OPENAI_API_KEY = ""
+                mock_settings.KIMI_MODEL = "moonshot-v1-8k"
+                mock_settings.KIMI_BASE_URL = "https://api.moonshot.cn/v1"
+                mock_settings.KIMI_MAX_TOKENS = 8000
+                mock_settings.KIMI_TEMPERATURE = 0.7
+                mock_settings.QWEN_API_KEY = ""
+                
+                with patch("backend.app.utils.llm_pool.ChatOpenAI") as mock_chat:
+                    mock_client = Mock()
+                    mock_chat.return_value = mock_client
+                    
+                    initialize_pool(config)
+                    client = get_llm_client("qa")
+                    
+                    assert client is mock_client
+                    shutdown_pool()
+        finally:
+            llm_pool_module._global_pool = original_pool
+
+    def test_get_llm_client_with_deepseek_model(self):
+        import backend.app.utils.llm_pool as llm_pool_module
+        
+        original_pool = llm_pool_module._global_pool
+        llm_pool_module._global_pool = None
+        
+        try:
+            config = LLMPoolConfig(max_connections=5, min_idle_connections=1)
+            with patch("backend.app.utils.llm_pool.settings") as mock_settings:
+                mock_settings.DEEPSEEK_API_KEY = "test-key"
+                mock_settings.DEEPSEEK_MODEL = "deepseek-chat"
+                mock_settings.DEEPSEEK_REASONER_MODEL = "deepseek-reasoner"
+                mock_settings.DEEPSEEK_MAX_TOKENS = 4000
+                mock_settings.DEEPSEEK_TEMPERATURE = 0.7
+                mock_settings.DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+                mock_settings.KIMI_API_KEY = ""
+                mock_settings.OPENAI_API_KEY = ""
+                mock_settings.KIMI_MODEL = "moonshot-v1-8k"
+                mock_settings.KIMI_BASE_URL = "https://api.moonshot.cn/v1"
+                mock_settings.KIMI_MAX_TOKENS = 8000
+                mock_settings.KIMI_TEMPERATURE = 0.7
+                mock_settings.QWEN_API_KEY = ""
+                
+                with patch("backend.app.utils.llm_pool.ChatOpenAI") as mock_chat:
+                    mock_client = Mock()
+                    mock_chat.return_value = mock_client
+                    
+                    initialize_pool(config)
+                    client = get_llm_client(model="deepseek")
+                    
+                    assert client is mock_client
+                    shutdown_pool()
+        finally:
+            llm_pool_module._global_pool = original_pool
+
+
+class TestLLMConfigurationError:
+    def test_api_key_missing_error(self):
+        config = LLMPoolConfig(max_connections=5, min_idle_connections=1)
+        with patch("backend.app.utils.llm_pool.settings") as mock_settings:
+            mock_settings.DEEPSEEK_API_KEY = "test-key"
+            mock_settings.DEEPSEEK_MODEL = "deepseek-chat"
+            mock_settings.DEEPSEEK_REASONER_MODEL = "deepseek-reasoner"
+            mock_settings.DEEPSEEK_MAX_TOKENS = 4000
+            mock_settings.DEEPSEEK_TEMPERATURE = 0.7
+            mock_settings.DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+            mock_settings.KIMI_API_KEY = ""
+            mock_settings.OPENAI_API_KEY = ""
+            mock_settings.KIMI_MODEL = "moonshot-v1-8k"
+            mock_settings.KIMI_BASE_URL = "https://api.moonshot.cn/v1"
+            mock_settings.KIMI_MAX_TOKENS = 8000
+            mock_settings.KIMI_TEMPERATURE = 0.7
+            mock_settings.QWEN_API_KEY = ""
+            
+            pool = LLMPool(config)
+            pool._scenario_configs["test_scenario"] = {
+                "model": "test-model",
+                "api_key": "",
+                "base_url": "https://test.com",
+                "temperature": 0.7,
+                "max_tokens": 1000,
+            }
+            pool._pools["test_scenario"] = []
+            pool._active_clients["test_scenario"] = []
+            pool._initialized = True
+            
+            with pytest.raises(LLMConfigurationError, match="API key not configured"):
+                pool._create_client("test_scenario")
+
+
+class TestLLMPoolContextWithModel:
+    def test_context_manager_with_model_param(self):
+        with patch("backend.app.utils.llm_pool.get_global_pool") as mock_get_pool:
+            mock_pool = Mock()
+            mock_client = Mock()
+            mock_pool.get_client.return_value = mock_client
+            mock_get_pool.return_value = mock_pool
+            
+            with LLMPoolContext("qa", model="qwen") as client:
+                assert client is mock_client
+            
+            mock_pool.get_client.assert_called_once_with(scenario="qwen", timeout=None)
 
 
 if __name__ == "__main__":
