@@ -5,6 +5,7 @@
 ## 功能特性
 
 - **BGE-M3 模型**: 支持多语言、多功能的嵌入模型
+- **向量维度**: 稠密向量 1024 维，稀疏向量支持词权重
 - **批处理优化**: 动态批处理队列，提高吞吐量
 - **独立部署**: 不依赖主项目，可独立运行
 - **配置灵活**: 支持环境变量配置
@@ -59,10 +60,10 @@ python main.py
 
 ### 网络拓扑
 
-服务默认绑定 `10.0.0.3:8000`，可通过以下地址访问：
+服务默认绑定 `0.0.0.0:8000`，可通过以下地址访问：
 
 - 本机: `http://localhost:8000`
-- 局域网: `http://10.0.0.3:8000` (当前机器 IP)
+- 局域网: `http://<本机IP>:8000`
 
 ### 环境变量
 
@@ -70,7 +71,7 @@ python main.py
 
 | 环境变量 | 默认值 | 说明 |
 |---------|-------|------|
-| `EMBEDDING_HOST` | `10.0.0.3` | 服务监听地址 |
+| `EMBEDDING_HOST` | `localhost` | 服务监听地址 |
 | `EMBEDDING_PORT` | `8000` | 服务监听端口 |
 | `EMBEDDING_MODEL_NAME` | `BAAI/bge-m3` | 模型名称 |
 | `EMBEDDING_DEVICE` | `cuda` | 设备 (`cuda`/`cpu`) |
@@ -175,6 +176,39 @@ result = response.json()
 
 print(result["success"])  # True
 print(len(result["data"]))  # 2
+```
+
+### QA 模块集成
+
+其他模块调用本服务进行向量嵌入：
+
+```python
+import os
+import requests
+
+class SimpleEmbedder:
+    def __init__(self):
+        self.embedding_url = os.getenv("EMBEDDING_SERVICE_URL", "http://localhost:8000/embedding")
+
+    def embed_query(self, text: str):
+        response = requests.post(
+            self.embedding_url,
+            json={"data": [text], "bDense": True, "bSparse": False},
+            timeout=30
+        )
+        return response.json()["data"][0]
+
+    def embed_documents(self, texts: list):
+        response = requests.post(
+            self.embedding_url,
+            json={"data": texts, "bDense": True, "bSparse": False},
+            timeout=60
+        )
+        return response.json()["data"]
+
+embedder = SimpleEmbedder()
+vector = embedder.embed_query("Hello world")  # 1024维向量
+vectors = embedder.embed_documents(["文本1", "文本2"])  # 批量处理
 ```
 
 ## 错误处理

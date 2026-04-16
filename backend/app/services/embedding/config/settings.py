@@ -10,7 +10,7 @@ logging.basicConfig(
 
 class Settings:
     def __init__(self):
-        self.HOST = os.getenv("EMBEDDING_HOST", "0.0.0.0")
+        self.HOST = os.getenv("EMBEDDING_HOST", "localhost")
         self.PORT = int(os.getenv("EMBEDDING_PORT", "8000"))
 
         local_model_path = os.getenv("EMBEDDING_LOCAL_MODEL_PATH", "F:\\develop\\hub\\models--BAAI--bge-m3\\snapshots\\5617a9f61b028005a4858fdac845db406aefb181")
