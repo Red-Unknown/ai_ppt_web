@@ -1,4 +1,5 @@
 from typing import List, Optional, AsyncGenerator, Dict, Any
+from sqlalchemy.orm import Session
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
@@ -17,6 +18,8 @@ from backend.app.services.session.manager import SessionManager
 from backend.app.utils.cache import local_cache
 from backend.app.services.qa.tools.retrieval import LocalKnowledgeTool
 from backend.app.services.qa.agents.react import ReActAgent
+from backend.app.repositories import QARecordRepository, LearningProgressRepository
+from backend.app.utils.llm_pool import initialize_pool, get_llm_client, release_llm_client, get_global_pool
 import time
 import json
 import asyncio
@@ -55,7 +58,11 @@ class QAService:
         "translation": {"temperature": 0.1, "max_tokens": 4000},
     }
 
-    def __init__(self):
+    def __init__(self, db: Session = None):
+        self.db = db
+        self.qa_repo = QARecordRepository(db) if db else None
+        self.progress_repo = LearningProgressRepository(db) if db else None
+
         self._validate_config()
         
         # Initialize Core Components
@@ -101,53 +108,36 @@ class QAService:
             raise ConfigurationError(error_msg)
 
     def _init_llm(self):
-        """Initialize LLM clients with current settings."""
+        """Initialize LLM clients with current settings via connection pool."""
+        pool = get_global_pool()
+        if not pool._initialized:
+            initialize_pool()
+            logger.info("LLM connection pool initialized in QAService")
+        
         self.llm_clients = {}
         
-        # Initialize DeepSeek Clients (Default)
-        for scenario, config in self.SCENARIO_CONFIGS.items():
-            model_name = settings.DEEPSEEK_MODEL
-            if scenario == "reasoner":
-                model_name = settings.DEEPSEEK_REASONER_MODEL
-                
-            self.llm_clients[scenario] = RateLimitedChatOpenAI(
-                model=model_name,
-                api_key=settings.DEEPSEEK_API_KEY,
-                base_url=settings.DEEPSEEK_BASE_URL,
-                temperature=config.get("temperature", settings.DEEPSEEK_TEMPERATURE),
-                max_tokens=config.get("max_tokens", settings.DEEPSEEK_MAX_TOKENS),
-                streaming=True,
-                max_retries=3,
-                extra_body={"include_reasoning": True} if scenario == "reasoner" else None
-            )
-
-        # Initialize Kimi Clients (for tool calling with web search)
-        if settings.KIMI_API_KEY:
-            for scenario, config in self.SCENARIO_CONFIGS.items():
-                self.llm_clients[f"{scenario}_kimi"] = ChatOpenAI(
-                    model=settings.KIMI_MODEL,
-                    api_key=settings.KIMI_API_KEY,
-                    base_url=settings.KIMI_BASE_URL,
-                    temperature=config.get("temperature", settings.KIMI_TEMPERATURE),
-                    max_tokens=config.get("max_tokens", settings.KIMI_MAX_TOKENS),
-                    streaming=True,
-                    max_retries=3
-                )
-            logger.info("Kimi LLM clients initialized for tool calling.")
-            
-        # Initialize GPT Clients (if available)
-        if settings.OPENAI_API_KEY:
-            for scenario in self.SCENARIO_CONFIGS:
-                self.llm_clients[f"{scenario}_gpt"] = ChatOpenAI(
-                    model="gpt-4o",
-                    api_key=settings.OPENAI_API_KEY,
-                    temperature=self.SCENARIO_CONFIGS[scenario].get("temperature", 0.7),
-                    max_tokens=self.SCENARIO_CONFIGS[scenario].get("max_tokens", 2048),
-                    streaming=True
-                )
+        for scenario in ["qa", "reasoner", "summary", "translation"]:
+            try:
+                self.llm_clients[scenario] = get_llm_client(scenario)
+            except Exception as e:
+                logger.error(f"Failed to get LLM client for {scenario}: {e}")
         
-        # Default LLM (can be switched via parameter)
-        self.llm = self.llm_clients["qa"]
+        if settings.KIMI_API_KEY:
+            for scenario in ["qa", "reasoner", "summary", "translation"]:
+                try:
+                    self.llm_clients[f"{scenario}_kimi"] = get_llm_client(f"{scenario}_kimi")
+                except Exception as e:
+                    logger.error(f"Failed to get Kimi client for {scenario}: {e}")
+            logger.info("Kimi LLM clients initialized via pool.")
+            
+        if settings.OPENAI_API_KEY:
+            for scenario in ["qa", "reasoner", "summary", "translation"]:
+                try:
+                    self.llm_clients[f"{scenario}_gpt"] = get_llm_client(f"{scenario}_gpt")
+                except Exception as e:
+                    logger.error(f"Failed to get GPT client for {scenario}: {e}")
+        
+        self.llm = self.llm_clients.get("qa")
 
     def _init_agent(self, llm_key: str = "qa"):
         """Initialize ReAct Agent with skills.
@@ -345,11 +335,13 @@ class QAService:
     async def stream_answer_question(self, request: ChatRequest, user_id: str = "student_001") -> AsyncGenerator[str, None]:
         """
         Stream response for WebSocket using Server-Sent Events style JSON chunks.
-        
+
         Args:
             request: Chat request with model parameter (deepseek, kimi, gpt-4o)
             user_id: User identifier
         """
+        start_time = time.time()
+
         # Set ContextVar for session_id to ensure tools can access it safely
         with AppContext.scope(session_id=request.session_id, user_id=user_id):
             try:
@@ -444,8 +436,28 @@ class QAService:
                     
                     if feedback_result.get("action") in ["SUPPLEMENT", "FALLBACK_VIDEO"]:
                         StudentStateManager.increment_confusion(session_id)
+                        if self.progress_repo:
+                            try:
+                                self.progress_repo.increment_confusion(user_id, session_id)
+                            except Exception as e:
+                                logger.error(f"Failed to sync confusion to DB: {e}")
                     else:
                         StudentStateManager.reset_confusion(session_id)
+                        if self.progress_repo:
+                            try:
+                                self.progress_repo.reset_confusion(user_id, session_id)
+                            except Exception as e:
+                                logger.error(f"Failed to sync confusion to DB: {e}")
+
+                    if self.progress_repo and feedback_result:
+                        try:
+                            topic = state.current_topic if state else "general"
+                            if feedback_result.get("action") == "SUPPLEMENT":
+                                self.progress_repo.update_mastery(user_id, session_id, topic, 0.3)
+                            elif feedback_result.get("action") == "MASTERED":
+                                self.progress_repo.update_mastery(user_id, session_id, topic, 0.95)
+                        except Exception as e:
+                            logger.error(f"Failed to update mastery: {e}")
         
                     yield self._emit_event(request.session_id, {"type": "start", "action": feedback_result.get("action")})
                     
@@ -617,6 +629,51 @@ class QAService:
                                 yield self._emit_event(request.session_id, self._create_resume_event(request.video_timestamp))
 
                             yield self._emit_event(request.session_id, {"type": "end"})
+
+                            response_ms = int((time.time() - start_time) * 1000)
+
+                            if self.qa_repo:
+                                try:
+                                    top_node_id = source_nodes[0].get("node_id") if source_nodes else None
+                                    top_page_num = source_nodes[0].get("page_num") if source_nodes else None
+
+                                    self.qa_repo.create_record(
+                                        session_id=request.session_id,
+                                        user_id=user_id,
+                                        school_id="school_001",
+                                        question_text=request.query,
+                                        answer_text=final_answer,
+                                        question_type=qa_type,
+                                        lesson_id=request.lesson_id,
+                                        cited_node_id=top_node_id,
+                                        source_page_num=top_page_num,
+                                        sources=source_nodes if source_nodes else None,
+                                        current_path=request.current_path,
+                                        video_timestamp=request.video_timestamp,
+                                        understanding_level="understood",
+                                        response_ms=response_ms,
+                                        reasoning_content=full_reasoning if full_reasoning else None,
+                                        tool_calls=None
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Failed to save QA record: {e}")
+
+                            if self.progress_repo:
+                                try:
+                                    self.progress_repo.upsert_progress(
+                                        user_id=user_id,
+                                        session_id=request.session_id,
+                                        school_id="school_001",
+                                        lesson_id=request.lesson_id,
+                                        current_node_id=None,
+                                        current_path=request.current_path,
+                                        current_topic=state.current_topic if state else None,
+                                        last_qa_query=request.query,
+                                        last_position_seconds=int(request.video_timestamp) if request.video_timestamp else 0
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Failed to update learning progress: {e}")
+
                             return
                             
                         except Exception as e:
@@ -710,6 +767,50 @@ class QAService:
                                 yield self._emit_event(request.session_id, self._create_resume_event(request.video_timestamp))
 
                             yield self._emit_event(request.session_id, {"type": "end"})
+
+                            response_ms = int((time.time() - start_time) * 1000)
+
+                            if self.qa_repo:
+                                try:
+                                    top_node_id = source_nodes[0].get("node_id") if source_nodes else None
+                                    top_page_num = source_nodes[0].get("page_num") if source_nodes else None
+
+                                    self.qa_repo.create_record(
+                                        session_id=request.session_id,
+                                        user_id=user_id,
+                                        school_id="school_001",
+                                        question_text=request.query,
+                                        answer_text=full_answer,
+                                        question_type=qa_type,
+                                        lesson_id=request.lesson_id,
+                                        cited_node_id=top_node_id,
+                                        source_page_num=top_page_num,
+                                        sources=source_nodes if source_nodes else None,
+                                        current_path=request.current_path,
+                                        video_timestamp=request.video_timestamp,
+                                        understanding_level="understood",
+                                        response_ms=response_ms,
+                                        reasoning_content=full_reasoning if full_reasoning else None,
+                                        tool_calls=None
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Failed to save QA record: {e}")
+
+                            if self.progress_repo:
+                                try:
+                                    self.progress_repo.upsert_progress(
+                                        user_id=user_id,
+                                        session_id=request.session_id,
+                                        school_id="school_001",
+                                        lesson_id=request.lesson_id,
+                                        current_node_id=None,
+                                        current_path=request.current_path,
+                                        current_topic=state.current_topic if state else None,
+                                        last_qa_query=request.query,
+                                        last_position_seconds=int(request.video_timestamp) if request.video_timestamp else 0
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Failed to update learning progress: {e}")
                             
                             # Save History
                             try:
@@ -978,6 +1079,50 @@ class QAService:
 
                     if request.video_timestamp:
                         yield self._emit_event(request.session_id, self._create_resume_event(request.video_timestamp))
+
+                    response_ms = int((time.time() - start_time) * 1000)
+
+                    if self.qa_repo:
+                        try:
+                            top_node_id = source_nodes[0].get("node_id") if source_nodes else None
+                            top_page_num = source_nodes[0].get("page_num") if source_nodes else None
+
+                            self.qa_repo.create_record(
+                                session_id=request.session_id,
+                                user_id=user_id,
+                                school_id="school_001",
+                                question_text=request.query,
+                                answer_text=full_answer_accumulator,
+                                question_type=qa_type,
+                                lesson_id=request.lesson_id,
+                                cited_node_id=top_node_id,
+                                source_page_num=top_page_num,
+                                sources=source_nodes if source_nodes else None,
+                                current_path=request.current_path,
+                                video_timestamp=request.video_timestamp,
+                                understanding_level="understood",
+                                response_ms=response_ms,
+                                reasoning_content=full_reasoning if 'full_reasoning' in locals() else None,
+                                tool_calls=captured_tool_calls if 'captured_tool_calls' in locals() else None
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to save QA record: {e}")
+
+                    if self.progress_repo:
+                        try:
+                            self.progress_repo.upsert_progress(
+                                user_id=user_id,
+                                session_id=request.session_id,
+                                school_id="school_001",
+                                lesson_id=request.lesson_id,
+                                current_node_id=None,
+                                current_path=request.current_path,
+                                current_topic=state.current_topic if state else None,
+                                last_qa_query=request.query,
+                                last_position_seconds=int(request.video_timestamp) if request.video_timestamp else 0
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to update learning progress: {e}")
 
                     return
 
