@@ -24,7 +24,8 @@ class Settings(BaseSettings):
         "port": 5432,
         "user": "postgres",
         "password": "yaoshun2006",
-        "timeout": 5,
+        "timeout": 30,
+        "connect_timeout": 30,
         "ssl": False,
     }
     

@@ -60,3 +60,40 @@ class ChatSessionResponse(BaseModel):
 
 class TruncateRequest(BaseModel):
     index: int
+
+
+class RetrieveRequest(BaseModel):
+    query: str = Field(..., description="用户问题")
+    lesson_id: str = Field(..., description="课件 ID")
+    top_k: int = Field(5, description="返回结果数量")
+    enable_decomposition: bool = Field(False, description="是否启用查询分解")
+
+
+class BboxItem(BaseModel):
+    page_num: int
+    bboxes: List[List[float]]
+    merged_bbox: List[float]
+    is_merged: bool
+    total_area_ratio: float
+
+
+class SourceItem(BaseModel):
+    node_id: str
+    content: str
+    path: str
+    relevance_score: float
+    page_num: Optional[int] = None
+
+
+class RetrieveResponseData(BaseModel):
+    answer: str
+    bbox_list: List[BboxItem] = []
+    context: Dict[str, Any] = {}
+    sources: List[SourceItem] = []
+
+
+class RetrieveResponse(BaseModel):
+    code: int = 200
+    message: str = "success"
+    data: Optional[RetrieveResponseData] = None
+    request_id: Optional[str] = None
