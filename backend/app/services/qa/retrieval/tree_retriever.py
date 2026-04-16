@@ -5,6 +5,9 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from pydantic import Field, PrivateAttr
+import logging
+
+logger = logging.getLogger(__name__)
 
 from .bm25 import SimpleBM25
 from .embedding import SimpleEmbedder
@@ -68,16 +71,16 @@ class TreeStructureRetriever(BaseRetriever):
         try:
             # backend/app/services/qa/retrieval/tree_retriever.py -> backend/app/core/knowledge_base.json
             kb_path = Path(__file__).resolve().parent.parent.parent.parent / "core" / "knowledge_base.json"
-            
+
             if not kb_path.exists():
-                print(f"Knowledge base not found at: {kb_path}")
-                return []
-            
+                logger.warning(f"[MOCK_DATA] Knowledge base not found at: {kb_path}, using mock data")
+                return self._get_mock_knowledge_base()
+
             with open(kb_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                
+
             documents = []
-            
+
             def traverse(node, current_path=""):
                 if isinstance(node, dict):
                     # Check if it's a leaf node (has content)
@@ -93,12 +96,42 @@ class TreeStructureRetriever(BaseRetriever):
                 elif isinstance(node, list):
                     for item in node:
                         traverse(item, current_path)
-                            
+
             traverse(data.get("knowledge_tree", {}))
             return documents
         except Exception as e:
-            print(f"Error loading knowledge base: {e}")
-            return []
+            logger.warning(f"[MOCK_DATA] Error loading knowledge base: {e}, using mock data")
+            return self._get_mock_knowledge_base()
+
+    def _get_mock_knowledge_base(self) -> List[Dict]:
+        """Return mock knowledge base data when real KB is unavailable."""
+        logger.info("[MOCK_DATA] Loading mock knowledge base for retrieval")
+        return [
+            {
+                "id": "mock_node_001",
+                "title": "课程介绍",
+                "content": "[MOCK_DATA] 本课程是《大学物理》，主要涵盖力学、热学、电磁学、光学和量子力学等基础内容。课程目标是培养学生理解自然界的基本规律和分析问题的能力。",
+                "path": "/course/intro",
+                "synonyms": ["课程简介", "课程大纲"],
+                "examples": ["力学基础", "热学原理"]
+            },
+            {
+                "id": "mock_node_002",
+                "title": "评分标准",
+                "content": "[MOCK_DATA] 平时成绩占40%（包含作业、课堂签到、互动讨论），期末考试占60%。作业需要在每周周五前提交，迟到扣分。",
+                "path": "/course/grading",
+                "synonyms": ["成绩评定", "考核方式"],
+                "examples": ["平时成绩", "期末考试"]
+            },
+            {
+                "id": "mock_node_003",
+                "title": "第一讲：质点运动学",
+                "content": "[MOCK_DATA] 质点运动学主要研究质点的位置、速度和加速度随时间的变化关系。描述质点运动需要参考系、坐标系和时间。",
+                "path": "/course/mechanics/kinematics",
+                "synonyms": ["运动学", "位移速度"],
+                "examples": ["匀速直线运动", "匀加速直线运动"]
+            }
+        ]
 
     def _get_relevant_documents(
         self, query: str, *, run_manager: CallbackManagerForRetrieverRun
