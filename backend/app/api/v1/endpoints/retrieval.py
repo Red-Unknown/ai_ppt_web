@@ -3,8 +3,8 @@ from typing import Optional
 import uuid
 import logging
 
-from app.schemas.qa import RetrieveRequest, RetrieveResponse, RetrieveResponseData, BboxItem, SourceItem
-from app.services.qa.retrieval.two_layer_retriever import TwoLayerRetriever
+from backend.app.schemas.qa import RetrieveRequest, RetrieveResponse, RetrieveResponseData, BboxItem, SourceItem
+from backend.app.services.qa.retrieval.two_layer_retriever import TwoLayerRetriever
 
 router = APIRouter(prefix="/qa", tags=["问答检索"])
 logger = logging.getLogger(__name__)
