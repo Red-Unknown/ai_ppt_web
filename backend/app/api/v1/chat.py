@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Body
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import Optional
+from sqlalchemy.orm import Session
 import json
 import asyncio
+from backend.app.core.database import get_db
 from backend.app.schemas.qa import (
     ChatRequest, ChatResponse, AdaptScriptRequest, AdaptScriptResponse,
     ChatSessionResponse, ChatMessage, TruncateRequest
@@ -12,6 +14,7 @@ from backend.app.services.qa.service import QAService
 from backend.app.services.session.manager import SessionManager
 from backend.app.services.student.state_manager import StudentStateManager
 from backend.app.utils.cache import local_cache
+from backend.app.repositories import QARecordRepository, LearningProgressRepository
 
 router = APIRouter()
 
@@ -66,6 +69,79 @@ async def truncate_history(session_id: str, request: TruncateRequest):
         raise HTTPException(status_code=400, detail="Invalid index or session")
     return {"status": "success"}
 
+# --- Database Query API ---
+
+@router.get("/db/qa-records/{session_id}")
+async def get_qa_records(
+    session_id: str,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """
+    Get QA records from database for a specific session.
+    Returns persistent QA records stored in the database.
+    """
+    repo = QARecordRepository(db)
+    records = repo.get_records_by_session(session_id, limit=limit)
+
+    return {
+        "code": "OK",
+        "data": [
+            {
+                "answer_id": r.answer_id,
+                "session_id": r.session_id,
+                "user_id": r.user_id,
+                "question_text": r.question_text,
+                "answer_text": r.answer_text,
+                "question_type": r.question_type,
+                "cited_node_id": r.cited_node_id,
+                "sources": r.sources,
+                "created_at": r.created_at.isoformat() if r.created_at else None
+            }
+            for r in records
+        ]
+    }
+
+@router.get("/db/learning-progress/{session_id}")
+async def get_learning_progress(
+    session_id: str,
+    user_id: str = "student_001",
+    db: Session = Depends(get_db)
+):
+    """
+    Get learning progress from database for a specific session.
+    Returns persistent learning progress stored in the database.
+    """
+    repo = LearningProgressRepository(db)
+    progress = repo.get_progress_by_session(user_id, session_id)
+
+    if not progress:
+        return {
+            "code": "OK",
+            "data": None,
+            "message": "No progress record found"
+        }
+
+    return {
+        "code": "OK",
+        "data": {
+            "track_id": progress.track_id,
+            "user_id": progress.user_id,
+            "session_id": progress.session_id,
+            "lesson_id": progress.lesson_id,
+            "current_node_id": progress.current_node_id,
+            "current_path": progress.current_path,
+            "current_topic": progress.current_topic,
+            "confusion_count": progress.confusion_count,
+            "mastery": progress.mastery,
+            "last_position_seconds": progress.last_position_seconds,
+            "progress_percent": progress.progress_percent,
+            "adjust_type": progress.adjust_type,
+            "needs_supplement": progress.needs_supplement,
+            "last_operate_time": progress.last_operate_time.isoformat() if progress.last_operate_time else None
+        }
+    }
+
 # --- Learning Session API ---
 
 @router.post("/session/start", response_model=SessionResponse)
@@ -90,8 +166,8 @@ async def get_session_preview(session_id: str):
     return status
 
 # Dependency for QAService (Singleton or Per-Request)
-def get_qa_service():
-    return QAService()
+def get_qa_service(db: Session = Depends(get_db)):
+    return QAService(db=db)
 
 async def mock_edge_filter(query: str) -> tuple[bool, str]:
     """

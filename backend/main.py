@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.core.config import settings
 from backend.app.api.v1 import chat, student, parser
 from backend.app.api.v1.ws_script import router as ws_router
+from backend.app.api.v1.endpoints import retrieval
 from backend.app.core.logging_config import setup_logging
 
 def get_application() -> FastAPI:
@@ -29,6 +30,7 @@ def get_application() -> FastAPI:
     application.include_router(student.router, prefix="/api/v1/student", tags=["student"])
     application.include_router(parser.router, prefix="/api/v1", tags=["parser"])
     application.include_router(ws_router, prefix="/api/v1", tags=["script"])
+    application.include_router(retrieval.router, prefix="/api/v1", tags=["qa-retrieval"])
     return application
 
 app = get_application()
@@ -43,7 +45,8 @@ async def root():
             "/api/v1/chat/chat (POST) - Main QA/Teacher Interface",
             "/api/v1/chat/session/start (POST) - Start Learning/Preview",
             "/api/v1/chat/session/{id}/preview (GET) - Check Video Generation",
-            "/api/v1/student/profile (GET/POST) - Manage Student Profile"
+            "/api/v1/student/profile (GET/POST) - Manage Student Profile",
+            "/api/v1/qa/retrieve (POST) - Retrieval API"
         ]
     }
 
