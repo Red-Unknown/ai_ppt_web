@@ -1,12 +1,12 @@
 
 
-# API 接口文档 v1.3
+# API 接口文档 v1.4
 
 ## 文档说明
 
 本文档描述了基于树形知识图谱的在线教育辅助系统的后端接口，涵盖鉴权、课程管理、学习会话、预览任务及增强的聊天互动能力。
 
-* **版本**：v1.3（新增聊天会话管理、推理模式 WebSocket 事件、单一缓存策略说明）
+* **版本**：v1.4（新增数据库查询接口）
 * **基础路径**：`/api/v1`
 * **鉴权方式**：Bearer Token (JWT)
 * **时间格式**：ISO 8601（例如 `2026-03-20T10:00:00Z`）
@@ -215,3 +215,83 @@
 * **标志**：`search_used` (Boolean)。一旦触发，后续请求禁用搜索工具。
 * **并发**：搜索时并行抓取 Top 5 结果（3s 超时）。
 * **熔断**：若搜索结果质量低（Hit Rate < Threshold），返回固定提示语。
+
+---
+
+## 5. 数据库查询接口 (Database Query) [NEW]
+
+提供对持久化问答记录和学习进度的查询能力。
+
+### 5.1 查询会话问答记录
+**GET /chat/db/qa-records/{session_id}**
+
+* **描述**：获取指定会话的所有持久化问答记录（从数据库查询）。
+* **参数**：
+  * `session_id` (路径参数)：会话ID
+  * `limit` (查询参数，可选)：返回记录数量，默认20
+* **响应 (200 OK)**：
+  ```json
+  {
+    "code": "OK",
+    "data": [
+      {
+        "answer_id": 1,
+        "session_id": "session_123",
+        "user_id": "student_001",
+        "question_text": "什么是极限？",
+        "answer_text": "极限是微积分的基本概念...",
+        "question_type": "FACTOID",
+        "cited_node_id": "node_001",
+        "sources": [
+          {
+            "node_id": "node_001",
+            "page_num": 5,
+            "content": "极限的定义..."
+          }
+        ],
+        "created_at": "2026-04-13T10:30:00"
+      }
+    ]
+  }
+  ```
+
+### 5.2 查询学习进度
+**GET /chat/db/learning-progress/{session_id}**
+
+* **描述**：获取指定会话的学习进度（从数据库查询）。
+* **参数**：
+  * `session_id` (路径参数)：会话ID
+  * `user_id` (查询参数，可选)：用户ID，默认 "student_001"
+* **响应 (200 OK)**：
+  ```json
+  {
+    "code": "OK",
+    "data": {
+      "track_id": "student_001_session_123",
+      "user_id": "student_001",
+      "session_id": "session_123",
+      "lesson_id": "lesson_001",
+      "current_node_id": "node_005",
+      "current_path": "/chapter1/section2",
+      "current_topic": "极限",
+      "confusion_count": 2,
+      "mastery": {
+        "极限": 0.65,
+        "导数": 0.3
+      },
+      "last_position_seconds": 120,
+      "progress_percent": 15.5,
+      "adjust_type": "normal",
+      "needs_supplement": false,
+      "last_operate_time": "2026-04-13T10:35:00"
+    }
+  }
+  ```
+* **无记录响应**：
+  ```json
+  {
+    "code": "OK",
+    "data": null,
+    "message": "No progress record found"
+  }
+  ```

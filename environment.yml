@@ -10,38 +10,70 @@ dependencies:
     - fastapi==0.109.0
     - uvicorn[standard]==0.27.0
     - python-multipart==0.0.6
-    
+    - starlette==0.35.1
+
     # Database & ORM
     - sqlalchemy==2.0.25
     - asyncpg==0.29.0
     - alembic==1.13.1
-    
+
     # Async Task Queue
     - celery==5.3.6
     - redis==5.0.1
-    
+
     # Security
     - python-jose[cryptography]==3.3.0
     - passlib[bcrypt]==1.7.4
-    
-    # Settings & Utils
-    - pydantic==2.5.3
-    - pydantic-settings==2.1.0
+    - PyJWT==2.8.0
+
+    # Settings & Utils (pydantic 2.7+ for langchain compatibility)
+    - pydantic==2.10.0
+    - pydantic-settings==2.7.0
     - httpx==0.26.0
     - python-dotenv==1.0.1
     - loguru==0.7.2
-    
-    # AI & Data Processing (Initial Set)
-    - langchain==0.1.0
-    - langchain-community==0.0.10
-    - langchain-openai==0.0.5
-    - openai==1.10.0
-    - tiktoken==0.5.2
+    - aiohttp==3.9.1
+    - requests==2.31.0
+    - yarl==1.22.0
+    - PyYAML==6.0.1
+
+    # AI & LLM (use compatible versions, let langchain resolve versions)
+    - langchain==0.3.0
+    - langchain-community==0.3.0
+    - langchain-openai==0.3.0
+    - langchain-text-splitters==0.3.0
+    - tiktoken==0.7.0
+
+    # Embedding & Vector Search
+    - FlagEmbedding>=1.2.10
+    - sentence-transformers>=2.2.0
+    - transformers==4.44.2
+    - peft==0.10.0
+    - "numpy<2"
+
+    # Data Processing
     - python-pptx==0.6.23
     - pdfplumber==0.10.3
+    - pdfminer.six==20221105
+    - pypdfium2==4.25.0
     - pillow==10.2.0
+    - lxml==5.1.0
+
+    # TTS
     - edge-tts==7.2.7
-    
+
+    # Parser Additional
+    - pypdf==4.2.0
+
+    # Windows COM (for parser)
+    - pywin32==306
+
+    # Math & Code Execution
+    - nltk==3.8.1
+
+    # Web Search
+    - tavily-python>=0.3.0
+
     # Dev Tools
     - pytest==7.4.4
     - pytest-asyncio==0.23.3
