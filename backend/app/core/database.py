@@ -63,7 +63,14 @@ def init_db() -> None:
             Lesson,
             CIRSection,
             QARecord,
-            LearningProgress
+            LearningProgress,
+            Subject,
+            Chapter,
+            NewCourse,
+            Slide,
+            CourseDocument,
+            LessonPlan,
+            PPT
         )
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
