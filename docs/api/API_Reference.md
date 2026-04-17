@@ -17,6 +17,61 @@
 
 ### 3.1 聊天与问答 (Chat & QA)
 
+#### REST API 检索端点 (Retrieve Endpoint)
+
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| POST | `/api/v1/qa/retrieve` | 基于课程知识图谱的 RAG 问答检索 |
+
+**请求参数 (RetrieveRequest)**
+
+| 参数 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `query` | String | Yes | 用户问题 |
+| `lesson_id` | String | Yes | 课件 ID |
+| `top_k` | Integer | No | 检索数量，默认 5 |
+| `enable_decomposition` | Boolean | No | 是否启用查询分解 |
+
+**响应参数 (RetrieveResponse)**
+
+| 参数 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `code` | Integer | 状态码 |
+| `message` | String | 状态信息 |
+| `data` | Object | 响应数据体 |
+| `request_id` | String | 请求 ID |
+
+**响应数据体 (RetrieveResponseData)**
+
+| 参数 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `answer` | String | 从检索结果中提取的答案 |
+| `bbox_list` | List[BboxItem] | 合并后的边界框列表（按页分组） |
+| `context` | Object | 上下文信息，包含 matched_chapters 和 source_pages |
+| `sources` | List[SourceItem] | 引用来源列表 |
+
+**BboxItem (边界框项)**
+
+| 字段名 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `page_num` | Integer | 页码 |
+| `bboxes` | List[List[Float]] | 原始边界框列表，每个为 `[x, y, w, h]` |
+| `merged_bbox` | List[Float] | 合并后的边界框 `[x, y, w, h]` |
+| `is_merged` | Boolean | 是否经过合并 |
+| `total_area_ratio` | Float | 合并后总面积占比 |
+
+**SourceItem (引用源项)**
+
+| 字段名 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `node_id` | String | Yes | 知识节点 ID |
+| `content` | String | Yes | 文本摘要 |
+| `path` | String | Yes | 知识路径 |
+| `relevance_score` | Float | Yes | 匹配度 (0-1) |
+| `page_num` | Integer | No | 页码 |
+| `bbox` | List[Float] | No | `[x, y, w, h]` 归一化坐标 |
+| `image_url` | String | No | 幻灯片图片 URL |
+
 #### WebSocket `/api/v1/chat/ws`
 全双工聊天流式传输。用于实时发送查询并接收流式响应。
 
@@ -533,3 +588,125 @@ ws.onmessage = (event) => {
 | v1.0 | 2026-03-01 | Team | 初始版本 |
 | v1.1 | 2026-03-10 | Role D (QA) | 新增 [视觉引用](#31-聊天与问答-chat--qa)、[策略事件](#31-聊天与问答-chat--qa)、[断点续接](#31-聊天与问答-chat--qa) 及 [前端交互规范](#前端展示标准-uiux) |
 | v1.2 | 2026-04-16 | Role D (QA) | 完善 [会话管理 API](#32-聊天会话管理-chat-sessions-management)、[学习会话 API](#33-学习会话-learning-sessions)、[系统配置 API](#34-系统与配置-system--config)、[数学计算 API](#35-数学流式计算-math-streaming-calculation)、[TTS/ASR API](#37-语音合成与识别-ttsasr)；扩展 [WebSocket 事件字段表](#51-websocket-事件字段)；添加 SourceNode.path 字段 |
+| v1.3 | 2026-04-17 | Role D (QA) | 新增 [Retrieve API](#31-聊天与问答-chat--qa) 详细字段说明；添加 BboxItem、SourceItem 数据结构；标注后端实现缺失的 bbox 和 image_url 字段 |
+
+## 7. QA 模块数据流向与实现指南
+
+### 7.1 数据处理流程概览
+
+QA 模块的数据处理流程分为以下几个层次：
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              数据层 (Data Layer)                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  CIR 数据 (JSON)              │  原始数据 (extract.json)                    │
+│  - node_id, node_name         │  - elements: [{content, bbox, ...}]       │
+│  - page_num                   │  - page_num                                │
+│  - path                       │  - element_type                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         检索层 (Retrieval Layer)                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  TwoLayerRetriever                                                        │
+│  ├─ _retrieve_cir(): 从 CIR 知识图谱检索章节/知识点                        │
+│  ├─ _retrieve_raw_json(): 从原始 JSON 检索文本块（含 bbox）                │
+│  └─ _aggregate_results(): 合并结果，提取答案                               │
+│       - merge_bboxes_by_page(): 按页合并 bbox                              │
+│       - format_bbox_for_response(): 格式化为 BboxItem                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          服务层 (Service Layer)                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  QAService.stream_answer_question()                                       │
+│  ├─ 使用 TreeStructureRetriever (单层检索) 或 TwoLayerRetriever           │
+│  ├─ 构造 source_nodes: 从 doc.metadata 提取 bbox, page_num, image_url   │
+│  └─ 通过 WebSocket 发送 sources 事件                                       │
+│                                                                             │
+│  TreeStructureRetriever (单层检索模式)                                     │
+│  └─ _inject_visual_mock_data(): 注入模拟的 bbox/page_num/image_url       │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          API 层 (API Layer)                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  POST /api/v1/qa/retrieve                                                  │
+│  └─ 返回 RetrieveResponseData { bbox_list, sources, answer, context }     │
+│                                                                             │
+│  WebSocket /api/v1/chat/ws                                                │
+│  └─ 发送 sources 事件: { type: "sources", content: [SourceNode] }          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         前端展示 (Frontend)                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Sources 事件处理                                                           │
+│  1. 接收 sources 事件                                                       │
+│  2. 渲染来源卡片（显示 content, path, relevance_score）                   │
+│  3. 点击卡片时:                                                             │
+│     - 调用 PDF/图片查看器                                                   │
+│     - 加载 image_url                                                       │
+│     - 在 bbox 区域绘制高亮框 (rgba(255,255,0,0.3), border: 2px solid #FFD700)│
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 7.2 页码 (page_num) 数据规范
+
+页码数据在系统中以整数形式传递，用于定位 PPT/教材的具体页面。
+
+| 来源 | 字段 | 类型 | 说明 |
+| :--- | :--- | :--- | :--- |
+| CIR 数据 | `page_num` | Integer | 知识节点对应的 PPT 页码 |
+| 原始 JSON | `page_num` | Integer | 文本块所在的 PPT 页码 |
+| WebSocket sources | `page_num` | Integer | 引用的 PPT 页码 |
+| BboxItem | `page_num` | Integer | bbox 所在的 PPT 页码 |
+
+### 7.3 边界框 (bbox) 数据规范
+
+边界框用于在前端 PDF/图片上定位具体的内容区域。
+
+**格式**: `[x, y, w, h]` (归一化坐标，0-1 范围)
+
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `x` | Float | 左上角 X 坐标 (0-1) |
+| `y` | Float | 左上角 Y 坐标 (0-1) |
+| `w` | Float | 宽度 (0-1) |
+| `h` | Float | 高度 (0-1) |
+
+**合并逻辑** (`merge_bboxes_by_page`):
+- 同一页的多个 bbox 会合并为一个外接矩形
+- 合并后生成 `merged_bbox`，用于简化前端高亮渲染
+
+### 7.4 需要调整的代码节点
+
+根据数据流分析，以下位置需要调整以确保页码和 bbox 数据正确传递：
+
+| 层级 | 文件 | 调整内容 | 优先级 |
+| :--- | :--- | :--- | :--- |
+| Schema | `schemas/qa.py` - `SourceItem` | 添加 `bbox` 和 `image_url` 字段 | 高 |
+| API Endpoint | `api/v1/endpoints/retrieval.py` | 在构建 SourceItem 时传入 bbox 和 image_url | 高 |
+| TwoLayerRetriever | `retrieval/two_layer_retriever.py` | 确保 raw_results 中的 bbox 传递到 sources | 中 |
+| TreeRetriever | `retrieval/tree_retriever.py` | 确保 metadata 中的 bbox/page_num/image_url 正确传递 | 中 |
+
+### 7.5 两层检索 vs 单层检索
+
+系统支持两种检索模式：
+
+1. **TwoLayerRetriever (两层检索)**:
+   - 第一层: 从 CIR 知识图谱检索章节/知识点
+   - 第二层: 从原始 JSON 检索具体文本块（含 bbox）
+   - 特点: 精确的 bbox 定位，适合视觉增强场景
+
+2. **TreeStructureRetriever (单层检索)**:
+   - 从知识树 JSON 检索
+   - 使用 `_inject_visual_mock_data()` 注入模拟的 bbox/page_num/image_url
+   - 特点: 快速响应，适合通用问答场景
+
+两种检索模式均通过 `sources` 事件向前端提供页码和 bbox 数据。
