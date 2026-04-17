@@ -10,6 +10,7 @@ class Intent(str, Enum):
 
 class ChatRequest(BaseModel):
     query: str = Field(..., description="The user's question")
+    lesson_id: Optional[str] = Field(None, description="Lesson/Course ID for retrieval")
     current_path: Optional[str] = Field(None, description="Current learning path, e.g., /chapter1/section2")
     top_k: int = Field(3, description="Number of results to retrieve")
     session_id: Optional[str] = Field(None, description="Session ID for conversation history")
@@ -83,6 +84,8 @@ class SourceItem(BaseModel):
     path: str
     relevance_score: float
     page_num: Optional[int] = None
+    bbox: Optional[List[float]] = Field(None, description="Bounding box [x, y, w, h] for highlighting")
+    image_url: Optional[str] = Field(None, description="URL to the slide image")
 
 
 class RetrieveResponseData(BaseModel):

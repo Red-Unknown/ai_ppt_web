@@ -2,14 +2,14 @@ import logging
 import asyncio
 from typing import Dict, Any, List
 from backend.app.services.qa.tools.base import BaseSkill
-from backend.app.services.qa.retrieval.tree_retriever import TreeStructureRetriever
+from backend.app.services.qa.retrieval.two_layer_retriever import TwoLayerRetriever
 from langchain_openai import ChatOpenAI
 from backend.app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 class LocalKnowledgeTool(BaseSkill):
-    def __init__(self, retriever: TreeStructureRetriever, llm: ChatOpenAI):
+    def __init__(self, retriever: TwoLayerRetriever, llm: ChatOpenAI):
         self.retriever = retriever
         self.llm = llm
 
@@ -27,95 +27,43 @@ class LocalKnowledgeTool(BaseSkill):
 
     async def execute(self, query: str, **kwargs) -> Dict[str, Any]:
         """
-        Enhanced RAG Execution:
+        Enhanced RAG Execution using TwoLayerRetriever:
         1. Decompose query (if complex).
         2. Multi-path retrieval.
         3. Aggregation.
         """
         try:
-            # 1. Decompose
-            sub_queries = await self._decompose_query(query)
-            logger.info(f"Decomposed '{query}' into: {sub_queries}")
-
-            # 2. Multi-path Retrieval (Parallel)
-            # Use ainvoke for async retrieval if available, else wrap
-            # Note: retriever.ainvoke returns List[Document]
-            tasks = [self.retriever.ainvoke(q) for q in sub_queries]
-            results = await asyncio.gather(*tasks)
+            lesson_id = kwargs.get("lesson_id", "lesson_mm_001")
+            top_k = kwargs.get("top_k", 3)
             
-            # Extract source node IDs safely
-            source_nodes = []
-            for result_list in results:
-                for doc in result_list:
-                    # Document objects might not have node_id, use metadata or hash
-                    node_id = doc.metadata.get("id") or doc.metadata.get("source") or str(hash(doc.page_content))
-                    source_nodes.append(node_id)
-
-            # 3. Aggregate & Deduplicate
-            aggregated_context = self._aggregate_results(results)
+            result = await self.retriever.retrieve(
+                query=query,
+                lesson_id=lesson_id,
+                top_k=top_k
+            )
+            
+            sources = result.get("sources", [])
+            answer = result.get("answer", "")
+            
+            source_nodes = [s.get("node_id") for s in sources if s.get("node_id")]
+            
+            context_str = "\n\n".join([
+                f"【来源：{s.get('path', '未知路径')}】\n内容：{s.get('content', '')}"
+                for s in sources[:3]
+            ])
+            
+            if not context_str:
+                context_str = "No relevant information found in the knowledge base."
             
             return {
                 "status": "success",
-                "content": aggregated_context,
+                "content": context_str,
                 "details": {
-                    "sub_queries": sub_queries,
-                    "source_nodes": source_nodes
+                    "sub_queries": [query],
+                    "source_nodes": source_nodes,
+                    "answer": answer
                 }
             }
         except Exception as e:
             logger.error(f"LocalKnowledgeTool error: {e}")
             return {"status": "error", "content": f"Error retrieving knowledge: {str(e)}"}
-
-    async def _decompose_query(self, query: str) -> List[str]:
-        """
-        Decompose complex query into 2-3 sub-queries using LLM.
-        """
-        # Simple heuristic: if query is short, don't decompose
-        if len(query) < 10:
-            return [query]
-
-        prompt = (
-            f"Break down the following student question into 2-3 simple, independent search queries "
-            f"to fully answer it. If the question is simple, just return it as is.\n"
-            f"Question: {query}\n"
-            f"Output ONLY the queries, one per line."
-        )
-        
-        try:
-            response = await self.llm.ainvoke(prompt)
-            content = response.content.strip()
-            queries = [q.strip("- ").strip() for q in content.split("\n") if q.strip()]
-            return queries[:3] # Limit to 3
-        except Exception as e:
-            logger.warning(f"Decomposition failed: {e}. Using original query.")
-            return [query]
-
-    def _aggregate_results(self, results_list: List[List[Any]]) -> str:
-        """
-        Combine results from multiple retrievals.
-        """
-        seen_content = set()
-        aggregated_text = []
-        
-        # Flatten and deduplicate
-        all_nodes = []
-        for nodes in results_list:
-            for node in nodes:
-                # Handle LangChain Document object
-                content = getattr(node, "page_content", getattr(node, "text", str(node)))
-                
-                # Simple deduplication by content hash
-                content_hash = hash(content)
-                
-                if content_hash not in seen_content:
-                    seen_content.add(content_hash)
-                    all_nodes.append(node)
-        
-        if not all_nodes:
-            return "No relevant information found in the knowledge base."
-
-        for i, node in enumerate(all_nodes, 1):
-            content = getattr(node, "page_content", getattr(node, "text", str(node)))
-            aggregated_text.append(f"[{i}] {content}")
-            
-        return "\n\n".join(aggregated_text)

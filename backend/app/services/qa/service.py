@@ -8,7 +8,7 @@ from langchain_openai import ChatOpenAI
 from backend.app.core.config import settings
 from backend.app.core import prompt_loader
 from backend.app.schemas.qa import ChatRequest, ChatResponse, SourceNode, Intent, AdaptScriptRequest, AdaptScriptResponse
-from backend.app.services.qa.retrieval.tree_retriever import TreeStructureRetriever
+from backend.app.services.qa.retrieval.two_layer_retriever import TwoLayerRetriever
 from backend.app.services.qa.analysis.router import DialogueRouter
 from backend.app.services.qa.analysis.intent import QAAnalyzer
 from backend.app.services.qa.tools.manager import SkillManager
@@ -66,7 +66,7 @@ class QAService:
         self._validate_config()
         
         # Initialize Core Components
-        self.retriever = TreeStructureRetriever()
+        self.retriever = TwoLayerRetriever()
         self.router = DialogueRouter(llm_model=settings.DEEPSEEK_MODEL)
         self.analyzer = QAAnalyzer(llm_model=settings.DEEPSEEK_MODEL)
         self.skill_manager = SkillManager()
@@ -91,8 +91,6 @@ class QAService:
         if not settings.DEEPSEEK_API_KEY:
             missing_keys.append("DEEPSEEK_API_KEY")
         
-        # Check Tavily only if we plan to use it, but user wants strict validation?
-        # Let's warn for Tavily, error for DeepSeek.
         if not settings.TAVILY_API_KEY:
              logger.warning("TAVILY_API_KEY is missing. Web search will use Mock/DDG mode.")
 
@@ -106,6 +104,63 @@ class QAService:
             )
             logger.error(error_msg)
             raise ConfigurationError(error_msg)
+
+    async def _do_retrieval(self, query: str, lesson_id: str = None, top_k: int = 3) -> Dict[str, Any]:
+        """
+        Unified retrieval method using TwoLayerRetriever.
+        
+        Returns:
+            dict with keys:
+                - context_str: formatted context string for LLM
+                - source_nodes: list of source dicts for frontend
+                - top_score: confidence score from top result
+                - retrieval_result: raw TwoLayerRetriever result
+        """
+        lesson_id = lesson_id or "lesson_mm_001"
+        
+        try:
+            result = await self.retriever.retrieve(
+                query=query,
+                lesson_id=lesson_id,
+                top_k=top_k
+            )
+        except Exception as e:
+            logger.error(f"Retrieval failed: {e}")
+            return {
+                "context_str": "",
+                "source_nodes": [],
+                "top_score": 0.0,
+                "retrieval_result": {}
+            }
+        
+        raw_results = result.get("raw_results", [])
+        sources = result.get("sources", [])
+        
+        context_str = "\n\n".join([
+            f"【来源：{s.get('path', '未知路径')}】\n内容：{s.get('content', '')}" 
+            for s in sources[:3]
+        ])
+        
+        source_nodes = []
+        for s in sources:
+            source_nodes.append({
+                "node_id": s.get("node_id", "unknown"),
+                "content": s.get("content", ""),
+                "path": s.get("path", ""),
+                "relevance_score": s.get("relevance_score", 0.0),
+                "bbox": s.get("bbox"),
+                "image_url": s.get("image_url"),
+                "page_num": s.get("page_num")
+            })
+        
+        top_score = sources[0].get("relevance_score", 0.0) if sources else 0.0
+        
+        return {
+            "context_str": context_str,
+            "source_nodes": source_nodes,
+            "top_score": top_score,
+            "retrieval_result": result
+        }
 
     def _init_llm(self):
         """Initialize LLM clients with current settings via connection pool."""
@@ -407,17 +462,18 @@ class QAService:
                     return
         
                 elif intent == Intent.FEEDBACK:
-                    # Retrieve context first
-                    self.retriever.current_path = request.current_path
-                    
-                    # IMPROVED: Use last successful QA query for context retrieval if available
                     search_query = request.query
                     if state.last_qa_query and len(request.query) < 10:
                         search_query = state.last_qa_query
                         logger.info(f"Using last QA query for feedback context: {search_query}")
-                        
-                    docs = self.retriever.invoke(search_query)
-                    context_str = "\n".join([d.page_content[:200] for d in docs])
+                    
+                    retrieval_result = await self._do_retrieval(
+                        query=search_query,
+                        lesson_id=request.lesson_id,
+                        top_k=request.top_k
+                    )
+                    context_str = retrieval_result["context_str"]
+                    source_nodes = retrieval_result["source_nodes"]
                     
                     yield self._emit_event(request.session_id, {"type": "status", "content": "正在分析反馈..."})
                     
@@ -515,22 +571,16 @@ class QAService:
                         
                         # Quick RAG (Standard DeepSeek-Chat)
                         # 1. Retrieve (Fast)
-                        docs = self.retriever.invoke(request.query)
-                        context_str = "\n\n".join([f"【来源：{d.metadata.get('path', '未知路径')}】\n内容：{d.page_content}" for d in docs])
+                        retrieval_result = await self._do_retrieval(
+                            query=request.query,
+                            lesson_id=request.lesson_id,
+                            top_k=request.top_k
+                        )
+                        context_str = retrieval_result["context_str"]
+                        source_nodes = retrieval_result["source_nodes"]
                         
                         # Emit Sources
-                        if docs:
-                            source_nodes = []
-                            for d in docs:
-                                source_nodes.append({
-                                    "node_id": d.metadata.get("node_id", "unknown"),
-                                    "content": d.page_content[:200] + "...",
-                                    "path": d.metadata.get("path", ""),
-                                    "relevance_score": d.metadata.get("score", 0.0),
-                                    "bbox": d.metadata.get("bbox"),
-                                    "image_url": d.metadata.get("image_url"),
-                                    "page_num": d.metadata.get("page_num")
-                                })
+                        if source_nodes:
                             yield self._emit_event(request.session_id, {"type": "sources", "content": source_nodes})
                         
                         # 2. Generate Quick Answer
@@ -700,25 +750,16 @@ class QAService:
                         
                         # 1. Retrieve
                         yield self._emit_event(request.session_id, {"type": "status", "content": "正在检索知识库..."})
-                        docs = self.retriever.invoke(request.query)
-                        # Cache the results if session exists
-                        if request.session_id:
-                            SessionManager.cache_docs(request.session_id, request.query, docs)
-                        context_str = "\n\n".join([f"【来源：{d.metadata.get('path', '未知路径')}】\n内容：{d.page_content}" for d in docs])
+                        retrieval_result = await self._do_retrieval(
+                            query=request.query,
+                            lesson_id=request.lesson_id,
+                            top_k=request.top_k
+                        )
+                        context_str = retrieval_result["context_str"]
+                        source_nodes = retrieval_result["source_nodes"]
                         
                         # Emit Sources Event (Visual Grounding)
-                        if docs:
-                            source_nodes = []
-                            for d in docs:
-                                source_nodes.append({
-                                    "node_id": d.metadata.get("node_id", "unknown"),
-                                    "content": d.page_content[:200] + "...",
-                                    "path": d.metadata.get("path", ""),
-                                    "relevance_score": d.metadata.get("score", 0.0),
-                                    "bbox": d.metadata.get("bbox"),
-                                    "image_url": d.metadata.get("image_url"),
-                                    "page_num": d.metadata.get("page_num")
-                                })
+                        if source_nodes:
                             yield self._emit_event(request.session_id, {"type": "sources", "content": source_nodes})
                         
                         # 2. Prepare Input
@@ -853,23 +894,6 @@ class QAService:
                     if cached_docs:
                         docs = cached_docs
                         top_score = docs[0].metadata.get("score", 0.0) if docs else 0.0
-                    else:
-                        yield self._emit_event(request.session_id, {"type": "status", "content": "正在检索本地知识库..."})
-                        docs = self.retriever.invoke(request.query)
-                        # Cache the results if session exists
-                        if request.session_id:
-                            SessionManager.cache_docs(request.session_id, request.query, docs)
-                        
-                        # Extract confidence from top-1 doc
-                        top_score = 0.0
-                        if docs:
-                            top_score = docs[0].metadata.get("score", 0.0)
-                    
-                    context_str = "\n\n".join([f"【来源：{d.metadata.get('path', '未知路径')}】\n内容：{d.page_content}" for d in docs])
-                    logger.info(f"Retrieval Confidence: {top_score:.4f}")
-
-                    # Emit Sources Event (Visual Grounding)
-                    if docs:
                         source_nodes = []
                         for d in docs:
                             source_nodes.append({
@@ -881,6 +905,22 @@ class QAService:
                                 "image_url": d.metadata.get("image_url"),
                                 "page_num": d.metadata.get("page_num")
                             })
+                        context_str = "\n\n".join([f"【来源：{d.metadata.get('path', '未知路径')}】\n内容：{d.page_content}" for d in docs])
+                    else:
+                        yield self._emit_event(request.session_id, {"type": "status", "content": "正在检索本地知识库..."})
+                        retrieval_result = await self._do_retrieval(
+                            query=request.query,
+                            lesson_id=request.lesson_id,
+                            top_k=request.top_k
+                        )
+                        context_str = retrieval_result["context_str"]
+                        source_nodes = retrieval_result["source_nodes"]
+                        top_score = retrieval_result["top_score"]
+                    
+                    logger.info(f"Retrieval Confidence: {top_score:.4f}")
+
+                    # Emit Sources Event (Visual Grounding)
+                    if source_nodes:
                         yield self._emit_event(request.session_id, {"type": "sources", "content": source_nodes})
 
                     # 2. Decision Logic (Heuristics)

@@ -68,7 +68,9 @@ async def retrieve_answer(request: RetrieveRequest):
                 content=src.get("content", ""),
                 path=src.get("path", ""),
                 relevance_score=src.get("relevance_score", 0),
-                page_num=src.get("page_num")
+                page_num=src.get("page_num"),
+                bbox=src.get("bbox"),
+                image_url=src.get("image_url")
             ))
 
         return RetrieveResponse(

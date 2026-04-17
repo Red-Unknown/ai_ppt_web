@@ -162,7 +162,9 @@ class TwoLayerRetriever:
                 "content": r.get("content", "")[:200] + "..." if len(r.get("content", "")) > 200 else r.get("content", ""),
                 "path": cir.get("path") if idx < len(cir_results) else "",
                 "relevance_score": r.get("score", 0),
-                "page_num": r.get("page_num")
+                "page_num": r.get("page_num"),
+                "bbox": r.get("bbox"),
+                "image_url": f"https://cdn.example.com/slides/course_101/slide_{r.get('page_num', 1):02d}.jpg" if r.get("page_num") else None
             }
             for idx, r in enumerate(raw_results)
             for cir in [cir_results[idx]] if idx < len(cir_results)
@@ -175,7 +177,9 @@ class TwoLayerRetriever:
                     "content": r.get("content", "")[:200] + "..." if len(r.get("content", "")) > 200 else r.get("content", ""),
                     "path": "",
                     "relevance_score": r.get("score", 0),
-                    "page_num": r.get("page_num")
+                    "page_num": r.get("page_num"),
+                    "bbox": r.get("bbox"),
+                    "image_url": f"https://cdn.example.com/slides/course_101/slide_{r.get('page_num', 1):02d}.jpg" if r.get("page_num") else None
                 })
 
         return {

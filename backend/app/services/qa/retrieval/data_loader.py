@@ -5,6 +5,15 @@ from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 import logging
 
+try:
+    from sqlalchemy.orm import Session
+    from backend.app.core.database import SessionLocal
+    from backend.app.models.cir import CIRSection as CIRSectionModel
+except ImportError:
+    from app.core.database import SessionLocal
+    from app.models.cir import CIRSection as CIRSectionModel
+    Session = None
+
 logger = logging.getLogger(__name__)
 
 CIR_DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "sandbox"
@@ -33,6 +42,37 @@ class TextBlock:
 
 
 def load_cir_data(lesson_id: str) -> List[Dict[str, Any]]:
+    try:
+        db: Session = SessionLocal()
+        try:
+            sections = db.query(CIRSectionModel).filter(
+                CIRSectionModel.lesson_id == lesson_id,
+                CIRSectionModel.node_type.in_(["chapter", "subchapter", "point"])
+            ).all()
+            
+            if sections:
+                logger.info(f"Loaded {len(sections)} CIR sections from database for lesson: {lesson_id}")
+                return [
+                    {
+                        "node_id": section.node_id,
+                        "node_name": section.node_name,
+                        "node_type": section.node_type,
+                        "page_num": section.page_num,
+                        "key_points": section.key_points or [],
+                        "teaching_content": section.teaching_content or "",
+                        "path": section.path or "",
+                        "lesson_id": section.lesson_id,
+                        "bbox": section.bbox,
+                        "image_url": section.image_url
+                    }
+                    for section in sections
+                ]
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"[DB] Failed to load CIR from database: {e}")
+
+    logger.info(f"[FILE] Falling back to file-based CIR data for lesson: {lesson_id}")
     cir_file = CIR_DATA_DIR / f"cir_sample_{lesson_id}.json"
     if not cir_file.exists():
         lesson_name_map = {
