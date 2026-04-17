@@ -22,9 +22,18 @@ Scripts/
 # IDE
 .vscode/
 .idea/
-.trae/
 *.swp
 *.swo
+
+# Trae Editor
+# 1. 先忽略 .trae 下的所有内容
+.trae/*
+
+# 2. 取消忽略 rules 目录（让 rules 目录本身可见）
+!.trae/rules/
+
+# 3. 确保 rules 目录下的文件也被追踪（防止 rules 为空或被二次忽略）
+!.trae/rules/*
 
 # Backend
 backend/app/__pycache__/

@@ -1,0 +1,44 @@
+---
+alwaysApply: true
+---
+# 后端日志系统使用规范
+
+## 📋 快速入门
+
+### 1. 基本用法
+
+在任意模块中使用日志系统：
+
+```python
+from backend.app.core.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+# 记录不同级别的日志
+logger.debug("调试信息")
+logger.info("业务操作记录")
+logger.warning("潜在问题警告")
+logger.error("业务错误")
+logger.critical("系统级严重错误")
+```
+
+
+## 🎯 最佳实践
+
+### 错误日志记录
+
+```python
+try:
+    # 业务代码
+    result = some_operation()
+except Exception as e:
+    logger.error(f"Operation failed: {str(e)}", exc_info=True)
+    # exc_info=True 会自动记录完整的堆栈跟踪
+```
+
+
+## 📁 日志文件管理
+
+### 文件位置
+所有日志文件存储在：`f:\college\sophomore\服务外包\log\`
+
