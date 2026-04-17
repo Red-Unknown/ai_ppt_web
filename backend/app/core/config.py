@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     KIMI_MAX_TOKENS: int = 8000
     KIMI_TEMPERATURE: float = 0.7
 
+    # Qwen Configuration (Alibaba Cloud)
+    QWEN_API_KEY: str = ""
+    QWEN_MODEL: str = "qwen-turbo"
+    QWEN_VISION_MODEL: str = "qwen-vl-plus"
+    QWEN_MAX_TOKENS: int = 2000
+    QWEN_TEMPERATURE: float = 0.7
+    QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
     # Feature Flags
     ENABLE_SUGGESTIONS: bool = True
 

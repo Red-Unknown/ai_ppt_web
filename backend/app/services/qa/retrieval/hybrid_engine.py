@@ -1,6 +1,9 @@
 from typing import List, Dict, Optional, Any
 import math
 from collections import Counter
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SimpleEmbedder:
     def __init__(self, api_key: str = None, base_url: str = None):
@@ -40,6 +43,7 @@ class SimpleEmbedder:
         norm = sum(x*x for x in vector) ** 0.5
         if norm > 0:
             vector = [x/norm for x in vector]
+        logger.debug(f"[MOCK_DATA] Generated mock embedding vector for: {text[:50]}")
         return vector
 
 

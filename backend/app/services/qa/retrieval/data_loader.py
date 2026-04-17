@@ -3,7 +3,9 @@ import os
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
+import logging
 
+logger = logging.getLogger(__name__)
 
 CIR_DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "sandbox"
 RAW_JSON_DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "sandbox"
@@ -46,7 +48,8 @@ def load_cir_data(lesson_id: str) -> List[Dict[str, Any]]:
         if alt_file.exists():
             cir_file = alt_file
         else:
-            return []
+            logger.warning(f"[MOCK_DATA] CIR data not found for lesson: {lesson_id}, using mock data")
+            return _get_mock_cir_data(lesson_id)
 
     try:
         with open(cir_file, "r", encoding="utf-8") as f:
@@ -68,23 +71,111 @@ def load_cir_data(lesson_id: str) -> List[Dict[str, Any]]:
                 })
         return result
     except Exception as e:
-        print(f"Error loading CIR data: {e}")
-        return []
+        logger.warning(f"[MOCK_DATA] Error loading CIR data: {e}, using mock data")
+        return _get_mock_cir_data(lesson_id)
+
+
+def _get_mock_cir_data(lesson_id: str) -> List[Dict[str, Any]]:
+    """Return mock CIR data when real data is unavailable."""
+    logger.info(f"[MOCK_DATA] Loading mock CIR data for lesson: {lesson_id}")
+    return [
+        {
+            "node_id": "mock_cir_001",
+            "node_name": "课程概述",
+            "node_type": "subchapter",
+            "page_num": 1,
+            "key_points": ["课程介绍", "教学目标", "学习方法"],
+            "teaching_content": "[MOCK_DATA] 本课程是《大学物理》，主要涵盖力学、热学、电磁学、光学和量子力学等基础内容。课程目标是培养学生理解自然界的基本规律和分析问题的能力。",
+            "path": "/course/intro",
+            "lesson_id": lesson_id
+        },
+        {
+            "node_id": "mock_cir_002",
+            "node_name": "质点运动学",
+            "node_type": "subchapter",
+            "page_num": 5,
+            "key_points": ["位移", "速度", "加速度", "运动方程"],
+            "teaching_content": "[MOCK_DATA] 质点运动学主要研究质点的位置、速度和加速度随时间的变化关系。描述质点运动需要参考系、坐标系和时间。基本公式：x = x0 + vt, v = dx/dt, a = dv/dt。",
+            "path": "/course/mechanics/kinematics",
+            "lesson_id": lesson_id
+        },
+        {
+            "node_id": "mock_cir_003",
+            "node_name": "牛顿运动定律",
+            "node_type": "subchapter",
+            "page_num": 10,
+            "key_points": ["第一定律", "第二定律", "第三定律", "受力分析"],
+            "teaching_content": "[MOCK_DATA] 牛顿第一定律：一切物体在没有外力作用时，总保持静止或匀速直线运动状态。牛顿第二定律：F=ma，合外力等于质量乘以加速度。牛顿第三定律：作用力与反作用力大小相等、方向相反。",
+            "path": "/course/mechanics/newton",
+            "lesson_id": lesson_id
+        }
+    ]
 
 
 def load_raw_json_data(lesson_id: str) -> Optional[Dict[str, Any]]:
     raw_json_file = RAW_JSON_DATA_DIR / "extract.json"
 
     if not raw_json_file.exists():
-        return None
+        logger.warning(f"[MOCK_DATA] Raw JSON data not found, using mock data")
+        return _get_mock_raw_json_data(lesson_id)
 
     try:
         with open(raw_json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         return data
     except Exception as e:
-        print(f"Error loading Raw JSON data: {e}")
-        return None
+        logger.warning(f"[MOCK_DATA] Error loading Raw JSON data: {e}, using mock data")
+        return _get_mock_raw_json_data(lesson_id)
+
+
+def _get_mock_raw_json_data(lesson_id: str) -> Optional[Dict[str, Any]]:
+    """Return mock raw JSON data when real data is unavailable."""
+    logger.info(f"[MOCK_DATA] Loading mock raw JSON data for lesson: {lesson_id}")
+    return {
+        "data": {
+            "structurePreview": {
+                "chapters": [
+                    {
+                        "chapterName": "第一章 力学基础",
+                        "subChapters": [
+                            {
+                                "subChapterName": "1.1 质点运动学",
+                                "pageRange": "1-5",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "content": "[MOCK_DATA] 质点运动学主要研究质点的位置、速度和加速度随时间的变化关系。描述质点运动需要参考系、坐标系和时间。",
+                                        "bbox": {"x": 0.1, "y": 0.2, "w": 0.8, "h": 0.15}
+                                    },
+                                    {
+                                        "type": "text",
+                                        "content": "[MOCK_DATA] 基本公式：x = x0 + vt (匀速直线运动), v = dx/dt, a = dv/dt。",
+                                        "bbox": {"x": 0.1, "y": 0.4, "w": 0.8, "h": 0.1}
+                                    }
+                                ]
+                            },
+                            {
+                                "subChapterName": "1.2 牛顿运动定律",
+                                "pageRange": "6-10",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "content": "[MOCK_DATA] 牛顿第一定律：一切物体在没有外力作用时，总保持静止或匀速直线运动状态。",
+                                        "bbox": {"x": 0.1, "y": 0.2, "w": 0.8, "h": 0.15}
+                                    },
+                                    {
+                                        "type": "text",
+                                        "content": "[MOCK_DATA] 牛顿第二定律：F=ma，合外力等于质量乘以加速度。",
+                                        "bbox": {"x": 0.1, "y": 0.4, "w": 0.8, "h": 0.1}
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }
 
 
 def extract_text_blocks(raw_data: Dict[str, Any], page_range: List[int]) -> List[TextBlock]:

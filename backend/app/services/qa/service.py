@@ -441,6 +441,8 @@ class QAService:
                                 self.progress_repo.increment_confusion(user_id, session_id)
                             except Exception as e:
                                 logger.error(f"Failed to sync confusion to DB: {e}")
+                        else:
+                            logger.info(f"[MOCK_DB] Confusion increment skipped - database unavailable. Session: {session_id}")
                     else:
                         StudentStateManager.reset_confusion(session_id)
                         if self.progress_repo:
@@ -448,6 +450,8 @@ class QAService:
                                 self.progress_repo.reset_confusion(user_id, session_id)
                             except Exception as e:
                                 logger.error(f"Failed to sync confusion to DB: {e}")
+                        else:
+                            logger.info(f"[MOCK_DB] Confusion reset skipped - database unavailable. Session: {session_id}")
 
                     if self.progress_repo and feedback_result:
                         try:
@@ -458,6 +462,8 @@ class QAService:
                                 self.progress_repo.update_mastery(user_id, session_id, topic, 0.95)
                         except Exception as e:
                             logger.error(f"Failed to update mastery: {e}")
+                    elif feedback_result:
+                        logger.info(f"[MOCK_DB] Mastery not updated - database unavailable. Action: {feedback_result.get('action')}")
         
                     yield self._emit_event(request.session_id, {"type": "start", "action": feedback_result.get("action")})
                     
@@ -657,6 +663,8 @@ class QAService:
                                     )
                                 except Exception as e:
                                     logger.error(f"Failed to save QA record: {e}")
+                            else:
+                                logger.info(f"[MOCK_DB] QA record not saved - database unavailable (reasoner mode). Question: {request.query[:50]}")
 
                             if self.progress_repo:
                                 try:
@@ -673,6 +681,8 @@ class QAService:
                                     )
                                 except Exception as e:
                                     logger.error(f"Failed to update learning progress: {e}")
+                            else:
+                                logger.info(f"[MOCK_DB] Learning progress not updated - database unavailable (reasoner mode). Session: {request.session_id}")
 
                             return
                             
@@ -795,6 +805,8 @@ class QAService:
                                     )
                                 except Exception as e:
                                     logger.error(f"Failed to save QA record: {e}")
+                            else:
+                                logger.info(f"[MOCK_DB] QA record not saved - database unavailable (deepseek-reasoner mode). Question: {request.query[:50]}")
 
                             if self.progress_repo:
                                 try:
@@ -811,6 +823,8 @@ class QAService:
                                     )
                                 except Exception as e:
                                     logger.error(f"Failed to update learning progress: {e}")
+                            else:
+                                logger.info(f"[MOCK_DB] Learning progress not updated - database unavailable (deepseek-reasoner mode). Session: {request.session_id}")
                             
                             # Save History
                             try:
@@ -1107,6 +1121,8 @@ class QAService:
                             )
                         except Exception as e:
                             logger.error(f"Failed to save QA record: {e}")
+                    else:
+                        logger.info(f"[MOCK_DB] QA record not saved - database unavailable. Question: {request.query[:50]}")
 
                     if self.progress_repo:
                         try:
@@ -1123,6 +1139,8 @@ class QAService:
                             )
                         except Exception as e:
                             logger.error(f"Failed to update learning progress: {e}")
+                    else:
+                        logger.info(f"[MOCK_DB] Learning progress not updated - database unavailable. Session: {request.session_id}")
 
                     return
 

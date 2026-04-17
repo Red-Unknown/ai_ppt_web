@@ -137,16 +137,187 @@
 | **降级** | 若无 `bbox`，仅高亮所在页面或显示“第 X 页” | 兼容旧数据 |
 
 ### 3.2 聊天会话管理 (Chat Sessions Management)
-(保持原有内容不变...)
+
+#### REST API
+
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| GET | `/api/v1/chat/sessions` | 获取当前用户的所有聊天会话 |
+| POST | `/api/v1/chat/sessions` | 创建新的聊天会话 |
+| GET | `/api/v1/chat/history/{session_id}` | 获取指定会话的聊天历史 |
+| GET | `/api/v1/chat/history/{session_id}/context` | 获取会话上下文（包括预期问题和思考路径） |
+| GET | `/api/v1/chat/history/{session_id}/events` | 获取会话的原始事件历史（事件溯源） |
+| POST | `/api/v1/chat/history/{session_id}/truncate` | 截断指定索引之后的聊天历史 |
+
+#### 请求/响应示例
+
+**创建会话**
+```json
+// Request
+POST /api/v1/chat/sessions
+
+// Response
+{"session_id": "sess_abc123"}
+```
+
+**获取会话历史**
+```json
+// Response
+[
+  {"role": "user", "content": "什么是牛顿第二定律？"},
+  {"role": "assistant", "content": "牛顿第二定律指出...", "sources": [...]}
+]
+```
+
+**截断历史**
+```json
+// Request
+POST /api/v1/chat/history/sess_123/truncate
+{"index": 5}
+
+// Response
+{"status": "success"}
+```
 
 ### 3.3 学习会话 (Learning Sessions)
-(保持原有内容不变...)
+
+#### REST API
+
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| POST | `/api/v1/chat/session/start` | 启动新的学习会话或预览会话 |
+| GET | `/api/v1/chat/session/{session_id}/preview` | 获取视频预览生成任务状态 |
+
+#### 数据库查询 API
+
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| GET | `/api/v1/chat/db/qa-records/{session_id}` | 获取指定会话的问答记录 |
+| GET | `/api/v1/chat/db/learning-progress/{session_id}` | 获取指定会话的学习进度 |
+
+#### 请求/响应示例
+
+**启动学习会话**
+```json
+// Request
+POST /api/v1/chat/session/start
+{
+  "course_id": "course_001",
+  "lesson_id": "lesson_001",
+  "mode": "learning",  // 或 "preview"
+  "current_path": "/chapter1/section1"
+}
+
+// Response
+{
+  "session_id": "sess_abc123",
+  "status": "started",
+  "lesson_id": "lesson_001"
+}
+```
+
+**获取学习进度**
+```json
+// Response
+{
+  "code": "OK",
+  "data": {
+    "track_id": "track_001",
+    "user_id": "student_001",
+    "session_id": "sess_abc123",
+    "lesson_id": "lesson_001",
+    "current_node_id": "node_5",
+    "current_path": "/chapter1/section2",
+    "current_topic": "牛顿第二定律",
+    "confusion_count": 2,
+    "mastery": 0.75,
+    "last_position_seconds": 125.5,
+    "progress_percent": 35.0,
+    "adjust_type": "normal",
+    "needs_supplement": false
+  }
+}
+```
 
 ### 3.4 系统与配置 (System & Config)
-(保持原有内容不变...)
+
+#### REST API
+
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| GET | `/api/v1/chat/metrics` | 获取缓存命中率和性能指标 |
+| POST | `/api/v1/chat/config/reload` | 热重载 QAService 配置 |
+
+#### SSE 端点
+
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| GET | `/api/v1/chat/sse` | Server-Sent Events 聊天端点（用于不支持 WebSocket 的场景） |
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| query | String | Yes | 用户问题 |
+| session_id | String | No | 会话 ID |
+
+**示例**
+```bash
+curl -N "http://localhost:8000/api/v1/chat/sse?query=什么是牛顿定律"
+```
+
+**响应格式 (SSE)**
+```
+data: {"type": "token", "content": "牛顿"}
+data: {"type": "token", "content": "定律"}
+data: [DONE]
+```
 
 ### 3.5 数学流式计算 (Math Streaming Calculation)
-(保持原有内容不变...)
+
+系统支持将自然语言数学问题转化为 Python 代码，流式返回代码生成、执行结果和解释。
+
+#### REST API
+
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| POST | `/api/v1/chat/math/stream` | 流式数学计算端点 |
+
+#### 请求参数 (ChatRequest)
+
+| 参数 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| query | String | Yes | 数学问题（如 "计算 1+1"） |
+| session_id | String | No | 会话 ID |
+
+#### 响应格式 (SSE)
+
+| 事件类型 | 说明 |
+| :--- | :--- |
+| `code_delta` | 代码生成片段 |
+| `execution_result` | 代码执行结果 |
+| `execution_error` | 代码执行错误 |
+| `explanation_delta` | 解释生成片段 |
+
+**请求示例**
+```json
+POST /api/v1/chat/math/stream
+{
+  "query": "计算 1 到 100 的和",
+  "session_id": "sess_123"
+}
+```
+
+**响应示例 (SSE)**
+```
+data: {"type": "code_delta", "content": "import "}
+data: {"type": "code_delta", "content": "numpy as np\n\n"}
+data: {"type": "code_delta", "content": "result = sum(range(1, 101))"}
+data: {"type": "execution_result", "content": "5050"}
+data: {"type": "explanation_delta", "content": "使用 Python 的 sum() 函数"}
+data: {"type": "explanation_delta", "content": "可以轻松计算 1 到 100 的总和。"}
+data: [DONE]
+```
 
 ### 3.6 双流响应 (Dual-Stream Response) [新增方案三]
 为了平衡响应速度与深度推理，系统支持 Quick Answer + Deep Reasoning 并行输出。此模式下，WebSocket 连接将依次推送“快速回答”流和“深度推理”流。
@@ -208,11 +379,106 @@
   - 错误消息: `{"type": "error", "code": "REASONING_FAILED", "content": "深度推理服务超时"}`
 
 #### 前端实现指引
-- **UI 布局**: 建议采用双层布局。上层为“最终答案区”，下层为可折叠的“思考过程区”。
+- **UI 布局**: 建议采用双层布局。上层为"最终答案区"，下层为可折叠的"思考过程区"。
 - **流式更新**:
-  - 收到 `quick_answer` 时，更新“最终答案区”。
-  - 收到 `enhanced_answer` 第一帧时，**清空**“最终答案区”的 Quick Answer 内容，开始重新渲染 Enhanced Answer。
-  - 收到 `reasoning_content` 时，追加到“思考过程区”。
+  - 收到 `quick_answer` 时，更新"最终答案区"。
+  - 收到 `enhanced_answer` 第一帧时，**清空**"最终答案区"的 Quick Answer 内容，开始重新渲染 Enhanced Answer。
+  - 收到 `reasoning_content` 时，追加到"思考过程区"。
+
+### 3.7 语音合成与识别 (TTS/ASR)
+
+系统提供 WebSocket 接口用于文字转语音 (TTS) 和语音转文字 (ASR) 服务。
+
+#### WebSocket `/api/v1/ws/script`
+
+- **协议**: WebSocket
+- **连接建立后第一条消息**: 必须是 JSON 格式，用于指定服务类型
+
+#### 服务类型: TTS (文字转语音)
+
+**第一条消息格式** (客户端 -> 服务端):
+```json
+{
+  "service": "tts",
+  "text": "你好，欢迎学习本课程",
+  "voice": "zh-CN-XiaoxiaoNeural"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `service` | String | Yes | 固定值 `"tts"` |
+| `text` | String | Yes | 要转换为语音的文本 |
+| `voice` | String | No | 语音角色，默认为 `"zh-CN-XiaoxiaoNeural"` |
+
+**响应格式** (服务端 -> 客户端):
+1. 音频流数据 (二进制)
+2. 结束标志: 空字节 (`""` 或 `b""`)
+
+**前端实现提示**:
+- 接收二进制音频数据后，拼接成完整的 WAV/MP3
+- 使用 Web Audio API 或 `<audio>` 元素播放
+
+#### 服务类型: ASR (语音转文字)
+
+**第一条消息格式** (客户端 -> 服务端):
+```json
+{
+  "service": "asr"
+}
+```
+
+**后续消息**: 发送音频数据块 (二进制)
+
+**结束标志**: 发送空字节 (`b""`) 表示音频发送完毕
+
+**响应格式** (服务端 -> 客户端):
+```json
+{"text": "转换后的文字内容"}
+```
+
+**前端实现提示**:
+- 音频数据块需要添加结束标志 (空字节)
+- 适用于实时语音输入场景
+
+#### WebSocket 连接示例 (JavaScript)
+
+```javascript
+const ws = new WebSocket("ws://localhost:8000/api/v1/ws/script");
+
+// TTS 示例
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    service: "tts",
+    text: "你好，欢迎学习",
+    voice: "zh-CN-XiaoxiaoNeural"
+  }));
+};
+
+ws.onmessage = (event) => {
+  if (event.data instanceof Blob) {
+    // 处理音频数据
+    const url = URL.createObjectURL(event.data);
+    new Audio(url).play();
+  } else if (event.data === "") {
+    // TTS 结束
+    console.log("TTS 播放完成");
+  }
+};
+
+// ASR 示例
+ws.onopen = () => {
+  ws.send(JSON.stringify({ service: "asr" }));
+  // 发送音频数据...
+  ws.send(audioBlob);
+  ws.send(b""); // 结束标志
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log("识别结果:", data.text);
+};
+```
 
 ## 4. MCP 服务调用与前端展示规范
 (保持原有内容不变...)
@@ -224,11 +490,21 @@
 | 事件名 (`type`) | 关键字段 (`content`/`data`) | 类型 | 必填 | 说明 |
 | :--- | :--- | :--- | :--- | :--- |
 | `token` | `content` | String | Yes | 答案生成的文本片段 |
+| `start` | `action` | String | No | 开始回答，包含动作类型 (QA_ANSWER, QA_CACHE, CONTROL 等) |
 | `sources` | `content` | List[SourceNode] | No | 引用来源列表 (含 bbox/image) |
-| `strategy` | `content` | StrategyLog | No | **[新增]** AI 策略切换日志 |
-| `resume` | `data` | ResumeData | No | **[新增]** 视频断点续接指令 |
-| `quick_answer` | `content` | String | No | **[新增]** 双流模式下的快速响应 |
-| `reasoning_content` | `content` | String | No | **[新增]** 深度思考过程 |
+| `strategy` | `content` | StrategyLog | No | AI 策略切换日志 |
+| `resume` | `data` | ResumeData | No | 视频断点续接指令 |
+| `quick_answer` | `content` | String | No | 双流模式下的快速响应 |
+| `reasoning_start` | - | - | No | 开始深度推理 |
+| `reasoning_content` | `content` | String | No | 深度思考过程 |
+| `enhanced_answer` | `content` | String | No | 深度增强回答 |
+| `reasoning_end` | - | - | No | 深度推理结束 |
+| `suggestions` | `content` | List[String] | No | 后续问题建议 |
+| `action` | `data` | Dict | No | 客户端动作指令 (RESUME, SUPPLEMENT 等) |
+| `status` | `content` | String | No | 状态消息 (如 "正在检索...") |
+| `end` | - | - | No | 回答结束标志 |
+| `error` | `content` | String | No | 错误信息 |
+| `evaluation` | `content` | Dict | No | 学习评价结果 |
 
 ### 5.2 引用源对象 (SourceNode)
 
@@ -236,6 +512,7 @@
 | :--- | :--- | :--- | :--- |
 | `node_id` | String | Yes | 知识节点 ID |
 | `content` | String | Yes | 文本摘要 |
+| `path` | String | Yes | 知识路径 |
 | `bbox` | List[Float] | No | `[x, y, w, h]` 归一化坐标 |
 | `image_url` | String | No | 幻灯片图片 URL |
 | `page_num` | Integer | No | 页码 |
@@ -255,3 +532,4 @@
 | :--- | :--- | :--- | :--- |
 | v1.0 | 2026-03-01 | Team | 初始版本 |
 | v1.1 | 2026-03-10 | Role D (QA) | 新增 [视觉引用](#31-聊天与问答-chat--qa)、[策略事件](#31-聊天与问答-chat--qa)、[断点续接](#31-聊天与问答-chat--qa) 及 [前端交互规范](#前端展示标准-uiux) |
+| v1.2 | 2026-04-16 | Role D (QA) | 完善 [会话管理 API](#32-聊天会话管理-chat-sessions-management)、[学习会话 API](#33-学习会话-learning-sessions)、[系统配置 API](#34-系统与配置-system--config)、[数学计算 API](#35-数学流式计算-math-streaming-calculation)、[TTS/ASR API](#37-语音合成与识别-ttsasr)；扩展 [WebSocket 事件字段表](#51-websocket-事件字段)；添加 SourceNode.path 字段 |

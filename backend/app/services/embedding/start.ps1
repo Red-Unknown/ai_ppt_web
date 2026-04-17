@@ -56,4 +56,4 @@ Write-Host "FP16: $env:EMBEDDING_USE_FP16"
 
 Stop-PortProcess -Port $SERVICE_PORT
 
-conda run -n ai_ppt_web --no-capture-output python -m uvicorn main:app --host $env:EMBEDDING_HOST --port $SERVICE_PORT --log-level $env:EMBEDDING_LOG_LEVEL.ToLower()
+conda run -n embedding --no-capture-output python -m uvicorn main:app --host $env:EMBEDDING_HOST --port $SERVICE_PORT --log-level $env:EMBEDDING_LOG_LEVEL.ToLower()

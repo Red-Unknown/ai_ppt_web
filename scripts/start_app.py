@@ -12,8 +12,23 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 BACKEND_DIR = ROOT_DIR / "backend"
 FRONTEND_DIR = ROOT_DIR / "frontend"
-BACKEND_PORT = 8000
+BACKEND_PORT = 8001
 FRONTEND_PORT = 5173
+
+# Use ai_ppt_web conda environment Python
+CONDA_ENV_NAME = "ai_ppt_web"
+def get_conda_python():
+    """Get Python executable path from ai_ppt_web conda environment."""
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix and CONDA_ENV_NAME in conda_prefix:
+        return sys.executable
+    user_profile = os.environ.get("USERPROFILE", os.environ.get("HOME", ""))
+    conda_env_path = Path(user_profile) / ".conda" / "envs" / CONDA_ENV_NAME / "python.exe"
+    if conda_env_path.exists():
+        return str(conda_env_path)
+    return sys.executable
+
+PYTHON_EXE = get_conda_python()
 
 # Global Silent Flag
 SILENT = False
@@ -64,10 +79,10 @@ def check_dependencies():
     log("Checking system dependencies...")
     
     # Check Python
-    log(f"Using Python: {sys.executable}")
-    if not os.path.exists(sys.executable):
+    log(f"Using Python: {PYTHON_EXE}")
+    if not os.path.exists(PYTHON_EXE):
         if not SILENT:
-            print("Error: Python executable not found.")
+            print(f"Error: Python executable not found: {PYTHON_EXE}")
         sys.exit(1)
         
     # Check NPM
@@ -77,10 +92,9 @@ def check_dependencies():
         sys.exit(1)
 
     log("Checking backend dependencies...")
-    # Check Backend Deps (fastapi, uvicorn, redis)
     try:
         subprocess.run(
-            [sys.executable, "-c", "import fastapi; import uvicorn; import redis"], 
+            [PYTHON_EXE, "-c", "import fastapi; import uvicorn; import redis"], 
             check=True, 
             stdout=subprocess.DEVNULL if SILENT else subprocess.PIPE, 
             stderr=subprocess.DEVNULL if SILENT else subprocess.PIPE
@@ -164,11 +178,10 @@ def start_backend(mode="dev"):
     log(f"Starting Backend (Mode: {mode})...")
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT_DIR)
-    # Suppress Python warnings to keep output clean
     env["PYTHONWARNINGS"] = "ignore"
     
     cmd = [
-        sys.executable, "-m", "uvicorn", 
+        PYTHON_EXE, "-m", "uvicorn", 
         "backend.main:app", 
         "--host", "0.0.0.0", 
         "--port", str(BACKEND_PORT)
