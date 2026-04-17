@@ -22,6 +22,8 @@ class BoundingBox(BaseModel):
 class PageElement(BaseModel):
     type: str = Field(..., description="Element type: 'text', 'image', etc.")
     content: str = Field(..., description="Text content or image description")
+    relationship: Optional[str] = Field(default=None, description="Image-text relationship summary")
+    content_data: Optional[str] = Field(default=None, description="Detailed parsed image text summary")
     bbox: BoundingBox = Field(..., description="Bounding box of the element")
 
 class SubChapter(BaseModel):
