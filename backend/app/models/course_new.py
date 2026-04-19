@@ -15,6 +15,7 @@ except ImportError:
 class Course(Base):
     """课程表"""
     __tablename__ = "courses"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="课程ID")
     title = Column(String(200), nullable=False, comment="课程标题")

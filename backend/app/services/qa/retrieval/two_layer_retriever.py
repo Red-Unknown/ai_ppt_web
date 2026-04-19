@@ -1,14 +1,7 @@
 from typing import List, Dict, Optional, Any
 import asyncio
 from .hybrid_engine import HybridSearchEngine
-from .data_loader import (
-    load_cir_data,
-    load_raw_json_data,
-    extract_text_blocks,
-    text_blocks_to_dict,
-    CIRSection,
-    TextBlock
-)
+from .data_loader import load_cir_data, CIRSection, TextBlock
 from .bbox_utils import (
     TextBlockWithBbox,
     Bbox,
@@ -43,11 +36,7 @@ class TwoLayerRetriever:
                 "sources": []
             }
 
-        page_range = [cir["page_num"] for cir in cir_results if cir.get("page_num")]
-
-        raw_results = await self._retrieve_raw_json(query, lesson_id, page_range, top_k)
-
-        aggregated = await self._aggregate_results(query, cir_results, raw_results)
+        aggregated = await self._aggregate_results(query, cir_results)
 
         return aggregated
 
@@ -55,7 +44,7 @@ class TwoLayerRetriever:
         self,
         query: str,
         lesson_id: str,
-        top_k: int = 3
+        top_k: int = 5
     ) -> List[Dict[str, Any]]:
         cir_data = load_cir_data(lesson_id)
 
@@ -80,49 +69,8 @@ class TwoLayerRetriever:
                 "key_points": r.get("key_points", []),
                 "teaching_content": r.get("teaching_content", ""),
                 "path": r.get("path"),
-                "score": r.get("score", 0)
-            }
-            for r in results
-        ]
-
-    async def _retrieve_raw_json(
-        self,
-        query: str,
-        lesson_id: str,
-        page_range: List[int],
-        top_k: int = 5
-    ) -> List[Dict[str, Any]]:
-        if not page_range:
-            return []
-
-        raw_data = load_raw_json_data(lesson_id)
-        if not raw_data:
-            return []
-
-        text_blocks = extract_text_blocks(raw_data, page_range)
-
-        if not text_blocks:
-            return []
-
-        blocks_dict = text_blocks_to_dict(text_blocks)
-
-        results = self.hybrid_engine.search(
-            query=query,
-            documents=blocks_dict,
-            search_fields=["content"],
-            top_k=top_k,
-            alpha=0.4,
-            beta=0.4,
-            gamma=0.2
-        )
-
-        return [
-            {
-                "id": r.get("id"),
-                "content": r.get("content"),
-                "page_num": r.get("page_num"),
                 "bbox": r.get("bbox"),
-                "element_type": r.get("element_type", "text"),
+                "image_url": r.get("image_url"),
                 "score": r.get("score", 0)
             }
             for r in results
@@ -131,21 +79,20 @@ class TwoLayerRetriever:
     async def _aggregate_results(
         self,
         query: str,
-        cir_results: List[Dict[str, Any]],
-        raw_results: List[Dict[str, Any]]
+        cir_results: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        answer = await self._extract_answer(query, raw_results)
+        answer = await self._extract_answer(query, cir_results)
 
         blocks_with_bbox = []
-        for r in raw_results:
+        for r in cir_results:
             if r.get("bbox"):
                 bbox_obj = Bbox.from_dict(r["bbox"])
                 if bbox_obj:
                     blocks_with_bbox.append(TextBlockWithBbox(
-                        content=r.get("content", ""),
+                        content=r.get("teaching_content", ""),
                         bbox=bbox_obj,
                         page_num=r.get("page_num", 0),
-                        element_type=r.get("element_type", "text")
+                        element_type="text"
                     ))
 
         merged_bboxes = merge_bboxes_by_page(blocks_with_bbox)
@@ -153,49 +100,36 @@ class TwoLayerRetriever:
 
         context = {
             "matched_chapters": [cir.get("node_name", "") for cir in cir_results],
-            "source_pages": list(set(r.get("page_num") for r in raw_results if r.get("page_num")))
+            "source_pages": list(set(r.get("page_num") for r in cir_results if r.get("page_num")))
         }
 
         sources = [
             {
-                "node_id": r.get("node_id") or r.get("id"),
-                "content": r.get("content", "")[:200] + "..." if len(r.get("content", "")) > 200 else r.get("content", ""),
-                "path": cir.get("path") if idx < len(cir_results) else "",
+                "node_id": r.get("node_id"),
+                "content": r.get("teaching_content", "")[:200] + "..." if len(r.get("teaching_content", "")) > 200 else r.get("teaching_content", ""),
+                "path": r.get("path", ""),
                 "relevance_score": r.get("score", 0),
                 "page_num": r.get("page_num"),
                 "bbox": r.get("bbox"),
-                "image_url": f"https://cdn.example.com/slides/course_101/slide_{r.get('page_num', 1):02d}.jpg" if r.get("page_num") else None
+                "image_url": r.get("image_url") or (f"https://cdn.example.com/slides/course_101/slide_{r.get('page_num', 1):02d}.jpg" if r.get("page_num") else None)
             }
-            for idx, r in enumerate(raw_results)
-            for cir in [cir_results[idx]] if idx < len(cir_results)
+            for r in cir_results
         ]
-
-        if len(raw_results) > len(cir_results):
-            for r in raw_results[len(cir_results):]:
-                sources.append({
-                    "node_id": r.get("id"),
-                    "content": r.get("content", "")[:200] + "..." if len(r.get("content", "")) > 200 else r.get("content", ""),
-                    "path": "",
-                    "relevance_score": r.get("score", 0),
-                    "page_num": r.get("page_num"),
-                    "bbox": r.get("bbox"),
-                    "image_url": f"https://cdn.example.com/slides/course_101/slide_{r.get('page_num', 1):02d}.jpg" if r.get("page_num") else None
-                })
 
         return {
             "cir_results": cir_results,
-            "raw_results": raw_results,
+            "raw_results": cir_results,
             "answer": answer,
             "bbox_list": bbox_list,
             "context": context,
             "sources": sources
         }
 
-    async def _extract_answer(self, query: str, raw_results: List[Dict[str, Any]]) -> str:
-        if not raw_results:
+    async def _extract_answer(self, query: str, cir_results: List[Dict[str, Any]]) -> str:
+        if not cir_results:
             return ""
 
-        contexts = [r.get("content", "") for r in raw_results[:3] if r.get("content")]
+        contexts = [r.get("teaching_content", "") for r in cir_results[:3] if r.get("teaching_content")]
 
         if not contexts:
             return ""
