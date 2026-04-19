@@ -25,6 +25,7 @@ sys.path.insert(0, str(project_root))
 
 # 使用绝对导入
 from app.core.database import Base
+from app.core.database import DATABASE_URL_SYNC
 from app.models import (
     User,
     CourseCategory,
@@ -36,6 +37,9 @@ from app.models import (
 )
 
 target_metadata = Base.metadata
+
+# Use runtime DB settings from app config to avoid alembic.ini drift.
+config.set_main_option("sqlalchemy.url", DATABASE_URL_SYNC)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

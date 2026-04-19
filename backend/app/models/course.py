@@ -4,6 +4,7 @@
 """
 
 from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, JSON
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -61,10 +62,11 @@ class Lesson(Base):
     file_type = Column(String(10), comment="文件类型")
     file_url = Column(String(500), nullable=False, comment="文件URL")
     category = Column(String(20), comment="分类")
-    task_status = Column(String(20), default="processing", comment="任务状态")
+    task_status = Column(String(20), nullable=False, server_default="processing", comment="任务状态：processing/completed/failed")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
     completed_at = Column(DateTime(timezone=True), comment="完成时间")
-    file_info = Column(JSON, comment="文件信息")
+    file_info = Column(JSONB, comment="文件信息（大小、页数等）")
+    mind_map = Column(JSONB, comment="课件全局思维导图（树状结构）")
 
     # 关系
     course = relationship("Course", back_populates="lessons")

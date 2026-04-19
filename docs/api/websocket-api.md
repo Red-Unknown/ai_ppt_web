@@ -376,6 +376,58 @@ asyncio.run(asr\_example("test.webm"))
 
 单次录音建议不超过一分钟，避免超时。若需长时间录音，请分多次发送。
 
+## 六、CIR 异步流水线（新增）
+
+### 6.1 连接地址
+
+- WebSocket: `/api/v1/ws/script`
+
+### 6.2 首条消息（JSON）
+
+```json
+{
+  "service": "cir_pipeline",
+  "json_path": "sandbox/课件解析结果(1).json",
+  "output_text_path": "sandbox/课件解析结果(1)_文本.txt",
+  "lesson_id": "parse_xxx",
+  "course_id": "course_xxx",
+  "school_id": "school_xxx",
+  "title": "材料力学-第二章",
+  "voice": "zh-CN-XiaoxiaoNeural"
+}
+```
+
+### 6.3 字段说明
+
+- `service`: 固定为 `cir_pipeline`
+- `json_path`: 基础解析结果 JSON 路径（必填）
+- `output_text_path`: 纯 content 文本输出路径（必填）
+- `lesson_id`: 课件任务ID（可选，不传则使用 JSON 内 parseId）
+- `course_id`: 课程ID（可选）
+- `school_id`: 学校ID（可选，默认 `default_school`）
+- `title`: 课件标题（可选）
+- `voice`: TTS 音色（可选，默认 `zh-CN-XiaoxiaoNeural`）
+
+### 6.4 服务端事件流（按步骤 yield）
+
+客户端会持续收到 JSON 事件，直到 `done` 或 `error`：
+
+```json
+{"type":"status","step":"start","message":"开始执行CIR异步流水线"}
+{"type":"status","step":"load_json","lesson_id":"parse_xxx","message":"解析JSON已加载"}
+{"type":"status","step":"extract_content","pages":127,"output_text_path":"sandbox/课件解析结果(1)_文本.txt"}
+{"type":"status","step":"mindmap","keywords_count":26,"message":"思维导图与关键词生成完成"}
+{"type":"status","step":"script","message":"i讲稿生成暂未实现，已跳过"}
+{"type":"progress","step":"tts","current":12,"total":88}
+{"type":"done","step":"store_cir","lesson_id":"parse_xxx","inserted_nodes":95,"keywords_count":26,"message":"CIR入库完成"}
+```
+
+错误示例：
+
+```json
+{"type":"error","error":"具体错误信息"}
+```
+
 
 
 text

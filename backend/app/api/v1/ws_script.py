@@ -3,6 +3,8 @@ import json
 import asyncio
 from backend.app.services.script.tts import TTSService
 from backend.app.services.script.asr import ASRService
+from backend.app.services.parser.cir_pipeline import run_cir_pipeline
+from backend.app.services.parser.full_pipeline import run_full_pipeline
 
 router = APIRouter()
 
@@ -24,6 +26,10 @@ async def websocket_script(websocket: WebSocket):
             await handle_tts(websocket, data)
         elif service == "asr":
             await handle_asr(websocket)
+        elif service == "cir_pipeline":
+            await handle_cir_pipeline(websocket, data)
+        elif service == "full_pipeline":
+            await handle_full_pipeline(websocket, data)
         else:
             await websocket.send_json({"error": f"未知服务: {service}"})
             await websocket.close()
@@ -88,5 +94,60 @@ async def handle_asr(websocket: WebSocket):
         await websocket.send_json({"text": text})
     except Exception as e:
         await websocket.send_json({"error": f"ASR识别失败: {str(e)}"})
+    finally:
+        await websocket.close()
+
+
+async def handle_cir_pipeline(websocket: WebSocket, data: dict):
+    json_path = data.get("json_path")
+    output_text_path = data.get("output_text_path")
+    if not json_path or not output_text_path:
+        await websocket.send_json({"error": "json_path 和 output_text_path 为必填"})
+        await websocket.close()
+        return
+
+    try:
+        async for event in run_cir_pipeline(
+            json_path=json_path,
+            output_text_path=output_text_path,
+            lesson_id=data.get("lesson_id"),
+            course_id=data.get("course_id"),
+            school_id=data.get("school_id", "default_school"),
+            title=data.get("title"),
+            voice=data.get("voice", "zh-CN-XiaoxiaoNeural"),
+        ):
+            await websocket.send_json(event)
+    except Exception as e:
+        await websocket.send_json({"type": "error", "error": str(e)})
+    finally:
+        await websocket.close()
+
+
+async def handle_full_pipeline(websocket: WebSocket, data: dict):
+    file_path = data.get("file_path")
+    file_type = data.get("file_type")
+    output_raw_json_path = data.get("output_raw_json_path")
+    output_text_path = data.get("output_text_path")
+    if not file_path or not file_type or not output_raw_json_path or not output_text_path:
+        await websocket.send_json({"error": "file_path/file_type/output_raw_json_path/output_text_path 为必填"})
+        await websocket.close()
+        return
+
+    try:
+        async for event in run_full_pipeline(
+            file_path=file_path,
+            file_type=file_type,
+            output_raw_json_path=output_raw_json_path,
+            output_text_path=output_text_path,
+            lesson_id=data.get("lesson_id"),
+            course_id=data.get("course_id"),
+            school_id=data.get("school_id", "default_school"),
+            title=data.get("title"),
+            voice=data.get("voice", "zh-CN-XiaoxiaoNeural"),
+            enable_script_llm=bool(data.get("enable_script_llm", True)),
+        ):
+            await websocket.send_json(event)
+    except Exception as e:
+        await websocket.send_json({"type": "error", "error": str(e)})
     finally:
         await websocket.close()
