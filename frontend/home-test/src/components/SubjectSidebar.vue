@@ -4,7 +4,7 @@
     <div class="fixed-header">
   <div class="title-container">
     <div class="sidebar-title">科目</div>
-    <div class="title-actions">
+    <div class="title-actions" v-if="theme === 'blue'">
       <button class="action-btn delete-btn" @click="enterDeleteMode">
         <svg viewBox="0 0 24 24" fill="currentColor">
           <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
@@ -27,9 +27,10 @@
         :key="subject.id"
         class="subject-item"
         :data-id="subject.id"
+        :class="{ 'selected': subject.id === selectedSubject }"
         @click="handleSelect(subject)"
       >
-        <span v-if="isDeleteMode" class="delete-icon" @click.stop="confirmDeleteSubject(subject)">
+        <span v-if="isDeleteMode && theme === 'blue'" class="delete-icon" @click.stop="confirmDeleteSubject(subject)">
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
           </svg>
@@ -63,12 +64,71 @@
 
 <script>
 import { ref, watch, onMounted } from 'vue'
+
+/**
+ * 科目侧边栏组件
+ * @description 显示科目列表，支持科目选择、添加和删除
+ * @example
+ * <SubjectSidebar
+ *   :subjects="subjectsList"
+ *   :selected-subject="currentSubjectId"
+ *   theme="blue"
+ *   @select="handleSelectSubject"
+ *   @add="handleAddSubject"
+ *   @delete="handleDeleteSubject"
+ * />
+ */
 export default {
   name: 'SubjectSidebar',
   props: {
-    subjects: { type: Array, default: () => [] },
+    /**
+     * 科目列表数据
+     * @type {Array<{id: string, name: string, isCollected?: boolean}>}
+     * @default []
+     */
+    subjects: { 
+      type: Array, 
+      default: () => [],
+      validator: (value) => {
+        if (!Array.isArray(value)) {
+          console.warn('[SubjectSidebar] subjects must be an array')
+          return false
+        }
+        const isValid = value.every(subject => 
+          typeof subject === 'object' && 
+          subject !== null && 
+          typeof subject.id === 'string' && 
+          typeof subject.name === 'string'
+        )
+        if (!isValid) {
+          console.warn('[SubjectSidebar] Each subject must have id and name properties')
+        }
+        return isValid
+      }
+    },
+    /**
+     * 当前选中的科目ID
+     * @type {string}
+     * @default ''
+     */
     selectedSubject: { type: String, default: '' },
-    theme: { type: String, default: 'blue' } // 'blue' 或 'orange'
+    /**
+     * 主题类型
+     * @type {'blue' | 'orange'}
+     * @default 'blue'
+     */
+    theme: { 
+      type: String, 
+      default: 'blue',
+      validator: (value) => {
+        const validThemes = ['blue', 'orange']
+        if (!validThemes.includes(value)) {
+          console.warn(`[SubjectSidebar] Invalid theme: "${value}". Must be one of: ${validThemes.join(', ')}`)
+          return false
+        }
+        return true
+      }
+    }
   },
   emits: ['select', 'collect', 'delete', 'add'],
   setup(props, { emit }) {
@@ -137,8 +197,8 @@ export default {
         highlightIndicatorRef.value.style.transition = 'all 0.4s ease'
         highlightIndicatorRef.value.style.top = `${relativeTop}px`
         highlightIndicatorRef.value.style.height = `${height}px`
-        highlightIndicatorRef.value.style.width = `${width}px`
-        highlightIndicatorRef.value.style.left = `${left - listRect.left}px`
+        highlightIndicatorRef.value.style.width = `${width - 8}px`
+        highlightIndicatorRef.value.style.left = `${left - listRect.left + 8}px`
       }
     }
 
@@ -185,70 +245,35 @@ export default {
   position: relative;
   display: flex;
   flex-direction: column;
+  background-color: var(--theme-primary);
 }
 
-/* 蓝色主题（教师端） */
-.subject-sidebar.theme-blue {
-  background-color: #008AC5;
+.subject-item:hover {
+  background-color: var(--theme-hover-background);
 }
 
-.theme-blue .subject-item:hover {
-  background-color: rgba(205, 244, 255, 0.5);
+.highlight-indicator {
+  background-color: var(--theme-background);
+  box-shadow: 0 2px 4px var(--theme-shadow-medium);
+  border-radius: 12px 0 0 12px;
 }
 
-.theme-blue .highlight-indicator {
-  background-color: #E1F4FF;
-  box-shadow: 0 2px 4px rgba(0, 138, 197, 0.2);
+.highlight-indicator + .subject-item {
+  color: var(--theme-hover-primary);
 }
 
-.theme-blue .highlight-indicator + .subject-item {
-  color: #006B9A;
+.popup-title,
+.popup-input {
+  color: var(--theme-text-primary);
+  border-color: var(--theme-border);
 }
 
-.theme-blue .popup-title,
-.theme-blue .popup-input {
-  color: #008AC5;
-  border-color: #008AC5;
+.btn-confirm {
+  background: var(--theme-primary);
 }
 
-.theme-blue .btn-confirm {
-  background: #008AC5;
-}
-
-.theme-blue .btn-confirm:hover {
-  background: #006B9A;
-}
-
-/* 暖橙色主题（学生端） */
-.subject-sidebar.theme-orange {
-  background-color: #F18B5B;
-}
-
-.theme-orange .subject-item:hover {
-  background-color: rgba(255, 230, 206, 0.5);
-}
-
-.theme-orange .highlight-indicator {
-  background-color: #FFE6CE;
-  box-shadow: 0 2px 4px rgba(241, 139, 91, 0.2);
-}
-
-.theme-orange .highlight-indicator + .subject-item {
-  color: #C96030;
-}
-
-.theme-orange .popup-title,
-.theme-orange .popup-input {
-  color: #F18B5B;
-  border-color: #F18B5B;
-}
-
-.theme-orange .btn-confirm {
-  background: #F18B5B;
-}
-
-.theme-orange .btn-confirm:hover {
-  background: #E86A3F;
+.btn-confirm:hover {
+  background: var(--theme-hover-primary);
 }
 
 /* 固定标题区域 */
@@ -268,7 +293,7 @@ export default {
 .sidebar-title {
   font-size: 18px;
   font-weight: bold;
-  color: #FFFFFF;
+  color: var(--theme-text-inverse);
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
 }
 
@@ -284,8 +309,8 @@ export default {
   height: 24px;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  color: #FFFFFF;
+  background: var(--theme-primary-opacity-20);
+  color: var(--theme-text-inverse);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -294,7 +319,7 @@ export default {
 }
 
 .action-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--theme-primary-opacity-30);
   transform: scale(1.1);
 }
 
@@ -305,15 +330,17 @@ export default {
 
 .delete-btn:hover {
   background: rgba(255, 0, 0, 0.3);
+  color: white;
 }
 
 .add-btn:hover {
   background: rgba(0, 255, 0, 0.3);
+  color: white;
 }
 
 .divider {
   height: 1px;
-  background-color: #FFFFFF;
+  background-color: var(--theme-text-inverse);
   margin: 0 10% 0;
   width: 80%;
 }
@@ -348,7 +375,7 @@ export default {
   display: flex;
   align-items: center;
   padding: 8px 16px;
-  color: #FFFFFF;
+  color: var(--theme-text-inverse);
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
@@ -362,7 +389,7 @@ export default {
   height: 18px;
   border-radius: 50%;
   background: rgba(255, 0, 0, 0.3);
-  color: #FFFFFF;
+  color: var(--theme-text-inverse);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -388,6 +415,11 @@ export default {
   left: 0;
   z-index: 0;
   pointer-events: none;
+}
+
+.subject-item.selected .subject-name {
+  color: var(--theme-text-tertiary) !important;
+  font-weight: bold;
 }
 
 /* 弹窗样式 */
@@ -479,6 +511,7 @@ export default {
 }
 
 .btn-confirm {
+  background: #008AC5;
   color: white;
 }
 

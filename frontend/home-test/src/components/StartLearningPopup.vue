@@ -27,8 +27,8 @@
         </div>
         
         <!-- 开始学习按钮 -->
-        <button class="start-button" @click="startLearning">
-          开始学习
+        <button class="start-button" :class="{ 'teacher-button': isTeacher }" @click="startLearning">
+          {{ isTeacher ? '开始修改' : '开始学习' }}
         </button>
       </div>
     </div>
@@ -47,6 +47,10 @@ const props = defineProps({
   title: {
     type: String,
     default: '开始学习'
+  },
+  isTeacher: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -182,6 +186,15 @@ const startLearning = () => {
 
 .start-button:hover {
   background: #ff731d;
+}
+
+/* 教师端按钮样式 */
+.start-button.teacher-button {
+  background: #3283FD;
+}
+
+.start-button.teacher-button:hover {
+  background: #1a6efd;
 }
 
 .start-button:active {

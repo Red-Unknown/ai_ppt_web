@@ -12,11 +12,6 @@
     
     <!-- 导航栏 -->
     <nav class="navbar">
-      <button class="navbar-back-button" @click="handleBack">
-        <svg class="back-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 12H5M12 19l-7-7 7-7"></path>
-        </svg>
-      </button>
       <div class="navbar-logo"></div>
       <div class="navbar-avatar"></div>
     </nav>
@@ -27,17 +22,6 @@
       <div class="title-section">
         <h1 class="main-title">欢迎使用AI智教</h1>
         <p class="sub-title">AI智能分析PPT生成教案，讲课过程可随时提问，高效沟通</p>
-      </div>
-      
-      <!-- 视频展示区 -->
-      <div class="video-container">
-        <div class="video-border">
-          <div class="video-placeholder">
-            <div class="video-content">
-              放展示视频
-            </div>
-          </div>
-        </div>
       </div>
       
       <!-- 认证按钮部分 -->
@@ -99,10 +83,7 @@ const showRegisterPopup = ref(false)
 const showForgetPopup = ref(false)
 const showNamePopup = ref(false)
 
-// 返回
-const handleBack = () => {
-  window.history.back()
-}
+
 
 // 关闭登录弹窗
 const closeLoginPopup = () => {
@@ -268,6 +249,20 @@ const handleForgotFromLogin = () => {
   }
 }
 
+@keyframes dynamicIn {
+  0% {
+    opacity: 0;
+    transform: translateY(60px) scale(0.8) rotateX(20deg);
+  }
+  60% {
+    transform: translateY(-10px) scale(1.05) rotateX(-5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotateX(0);
+  }
+}
+
 /* 导航栏 */
 .navbar {
   position: fixed;
@@ -286,29 +281,7 @@ const handleForgotFromLogin = () => {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
-.navbar-back-button {
-  width: 40px;
-  height: 40px;
-  border: none;
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 50%;
-  color: #333;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-}
 
-.navbar-back-button:hover {
-  background: rgba(255, 255, 255, 0.8);
-  transform: translateX(-2px);
-}
-
-.back-icon {
-  width: 20px;
-  height: 20px;
-}
 
 .navbar-logo {
   font-size: 1.25rem;
@@ -334,6 +307,7 @@ const handleForgotFromLogin = () => {
   justify-content: center;
   padding: 80px 2rem 2rem;
   box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.5);
 }
 
 /* 标题区域 */
@@ -351,6 +325,8 @@ const handleForgotFromLogin = () => {
   margin-bottom: 1rem;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
   letter-spacing: -0.02em;
+  animation: dynamicIn 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  opacity: 0;
 }
 
 .sub-title {
@@ -359,81 +335,9 @@ const handleForgotFromLogin = () => {
   line-height: 1.6;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   letter-spacing: 0.01em;
+  animation: dynamicIn 1s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s forwards;
+  opacity: 0;
 }
-
-/* 视频展示区 */
-.video-container {
-  margin-bottom: 3rem;
-  position: relative;
-}
-
-.video-border {
-  position: relative;
-  width: 700px;
-  height: 400px;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 0 40px rgba(255, 107, 107, 0.6);
-}
-
-.video-border::before {
-  content: '';
-  position: absolute;
-  top: -4px;
-  left: -4px;
-  right: -4px;
-  bottom: -4px;
-  background: linear-gradient(90deg, #ff6b6b, #ffd93d, #ff6b6b, #ffd93d);
-  background-size: 400% 400%;
-  border-radius: 16px;
-  z-index: -1;
-  animation: borderGlow 2s linear infinite;
-}
-
-@keyframes borderGlow {
-  0% {
-    background-position: 0% 0%;
-  }
-  100% {
-    background-position: 100% 0%;
-  }
-}
-
-.video-placeholder {
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    text-align: center;
-  }
-
-  .video-content {
-    width: 695px;
-    height: 395px;
-    background: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #333;
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
-
-  .video-icon {
-    width: 64px;
-    height: 64px;
-    margin-bottom: 1rem;
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .video-text {
-    font-size: 1.125rem;
-    font-weight: 500;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-  }
 
 /* 认证按钮部分 */
 .auth-buttons {
@@ -442,6 +346,8 @@ const handleForgotFromLogin = () => {
   width: 100%;
   max-width: 400px;
   justify-content: center;
+  animation: dynamicIn 1s cubic-bezier(0.34, 1.56, 0.64, 1) 0.4s forwards;
+  opacity: 0;
 }
 
 .login-button {
@@ -574,18 +480,6 @@ const handleForgotFromLogin = () => {
     font-size: 1rem;
   }
   
-  .video-border {
-    width: 100%;
-    max-width: 700px;
-    height: auto;
-    aspect-ratio: 1.75;
-  }
-  
-  .video-content {
-    width: 100%;
-    height: 100%;
-    font-size: 1.25rem;
-  }
 }
 
 @media (max-width: 768px) {
@@ -617,15 +511,6 @@ const handleForgotFromLogin = () => {
 }
 
 @media (max-width: 480px) {
-  .video-icon {
-    width: 48px;
-    height: 48px;
-  }
-  
-  .video-text {
-    font-size: 0.875rem;
-  }
-  
   .login-button,
   .register-button {
     padding: 0.875rem 1.5rem;
@@ -637,13 +522,11 @@ const handleForgotFromLogin = () => {
 @media (prefers-reduced-motion: reduce) {
   .bubble,
   .bg-gradient,
-  .video-border::before,
   .popup-overlay,
   .popup-content {
     animation: none;
   }
   
-  .navbar-back-button,
   .login-button,
   .register-button,
   .popup-close {

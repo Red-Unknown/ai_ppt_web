@@ -2,8 +2,8 @@
   <div class="screen">
     <!-- 顶部栏 -->
     <div class="header" :class="{ 'header-shadow': isScrolled }">
-      <button class="back-icon" @click="goBack">
-        <img src="@/assets/images/action/ic-arrow_left.svg" alt="返回" />
+      <button class="back-button" @click="goBack">
+        <img src="@/assets/images/action/ic-arrow_left2.svg" alt="返回" class="back-icon">
       </button>
       <div class="user-info">
         <div class="avatar" @click="showUserInfoPopup = true"></div>
@@ -154,17 +154,11 @@
       </div>
     </div>
 
-    <!-- 开始学习弹窗 -->
-    <StartLearningPopup
-      :is-visible="showStartLearningPopup"
-      @close="showStartLearningPopup = false"
-      @start="handleStartLearning"
-    />
-    
     <!-- 用户信息弹窗 -->
     <UserInfoPopup
       v-if="showUserInfoPopup"
       :user-info="userInfo"
+      theme="blue"
       @close="showUserInfoPopup = false"
       @menu-click="handleMenuClick"
       @logout="handleLogout"
@@ -197,7 +191,6 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import StartLearningPopup from '@/components/StartLearningPopup.vue'
 import SubjectSidebar from '@/components/SubjectSidebar.vue'
 import ChapterSidebar from '@/components/ChapterSidebar.vue'
 import UserInfoPopup from '@/components/UserInfoPopup.vue'
@@ -209,8 +202,6 @@ const showPreviewModeIndicator = ref(false)
 // 状态
 const hoveredPptIndex = ref(-1)
 const showUserMenu = ref(false)
-const showStartLearningPopup = ref(false)
-const selectedPPT = ref(null)
 let hoverTimer = null
 
 // 搜索状态
@@ -431,16 +422,7 @@ const handleChapterSelect = (chapter) => {
 // 处理PPT点击
 const handlePptClick = (id) => {
   console.log('点击PPT:', id)
-  // 保存选中的PPT
-  selectedPPT.value = id
-  // 显示开始学习弹窗
-  showStartLearningPopup.value = true
-}
-
-// 处理开始学习
-const handleStartLearning = () => {
-  console.log('开始学习PPT:', selectedPPT.value)
-  // 跳转到PptTeach2页面
+  // 直接跳转到PptTeach2页面
   window.location.href = '/ppt-teach2'
 }
 
@@ -619,9 +601,16 @@ const handleChapterAdd = (newChapter) => {
   padding: 0 24px;
   z-index: 100;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  transition: all 0.3s ease;
 }
 
-.back-icon {
+.header-shadow {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.back-button {
   width: 40px;
   height: 40px;
   border: none;
@@ -631,20 +620,22 @@ const handleChapterAdd = (newChapter) => {
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  border-radius: 50%;
 }
 
-.back-icon:hover {
+.back-button:hover {
   transform: translateX(-2px);
+  background: rgba(0, 138, 197, 0.05);
 }
 
-.back-icon img {
-  width: 24px;
-  height: 24px;
+.back-icon {
+  width: 20px;
+  height: 20px;
   transition: all 0.2s ease;
 }
 
-.back-icon:hover img {
-  filter: invert(45%) sepia(70%) saturate(300%) hue-rotate(180deg) brightness(90%) contrast(90%);
+.back-button:hover .back-icon {
+  filter: brightness(0) saturate(100%) invert(29%) sepia(62%) saturate(1865%) hue-rotate(176deg) brightness(93%) contrast(101%);
 }
 
 .user-info {
@@ -665,10 +656,12 @@ const handleChapterAdd = (newChapter) => {
   justify-content: center;
   color: white;
   font-weight: bold;
+  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
 }
 
 .avatar:hover {
   box-shadow: 0 0 0 4px rgba(0, 138, 197, 0.2);
+  transform: scale(1.05);
 }
 
 .username {
@@ -676,6 +669,7 @@ const handleChapterAdd = (newChapter) => {
   color: #008AC5;
   font-weight: 400;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
+  white-space: nowrap;
 }
 
 /* 主体布局 */
@@ -689,7 +683,7 @@ const handleChapterAdd = (newChapter) => {
 /* 右侧：课程内容区 */
 .course-content {
   flex: 1;
-  background: #E1F4FF;
+  background: #F2FCFF;
   padding: 24px;
   height: calc(100vh - 60px);
   box-shadow: -4px 0 12px rgba(0, 138, 197, 0.1);
@@ -721,7 +715,7 @@ const handleChapterAdd = (newChapter) => {
 .course-title {
   font-size: 24px;
   font-weight: bold;
-  color: #008AC5;
+  color: #276884;
   margin: 0;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
 }
@@ -738,7 +732,7 @@ const handleChapterAdd = (newChapter) => {
   border: none;
   border-radius: 50%;
   background: rgba(0, 138, 197, 0.2);
-  color: #008AC5;
+  color: #276884;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -854,7 +848,7 @@ const handleChapterAdd = (newChapter) => {
 }
 
 .search-input::placeholder {
-  color: #999999;
+  color: #276884;
 }
 
 .search-input:focus {
@@ -911,7 +905,7 @@ const handleChapterAdd = (newChapter) => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  background: #E1F4FF;
+  background: #CDF4FF;
 }
 
 .header-content {
@@ -924,7 +918,7 @@ const handleChapterAdd = (newChapter) => {
 .card-title {
   font-size: 16px;
   font-weight: bold;
-  color: #008AC5;
+  color: #276884;
   margin: 0;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
 }
@@ -950,13 +944,13 @@ const handleChapterAdd = (newChapter) => {
 
 .card-teacher {
   font-size: 12px;
-  color: #008AC5;
+  color: #276884;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
 }
 
 .card-date {
   font-size: 12px;
-  color: #008AC5;
+  color: #276884;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
 }
 
@@ -974,7 +968,7 @@ const handleChapterAdd = (newChapter) => {
   left: 0;
   right: 0;
   height: 66.67%; /* 占卡片的三分之二 */
-  background: linear-gradient(to bottom, rgba(225, 244, 255, 1), rgba(225, 244, 255, 0));
+  background: linear-gradient(to bottom, rgba(205, 244, 255, 1), rgba(205, 244, 255, 0));
   padding: 12px;
   transition: all 0.3s ease;
   display: flex;
@@ -985,7 +979,7 @@ const handleChapterAdd = (newChapter) => {
 
 .card-description-overlay p {
   font-size: 12px;
-  color: #008AC5;
+  color: #276884;
   margin: 0;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
   line-height: 1.4;
@@ -1053,7 +1047,7 @@ const handleChapterAdd = (newChapter) => {
   top: 60px;
   width: 300px;
   height: calc(100vh - 60px);
-  background: #E1F4FF;
+  background: #F2FCFF;
   box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   z-index: 40;
@@ -1072,7 +1066,7 @@ const handleChapterAdd = (newChapter) => {
 .favorite-panel-title {
   font-size: 18px;
   font-weight: bold;
-  color: #008AC5;
+  color: #276884;
   margin-bottom: 16px;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
   text-align: center;
@@ -1117,7 +1111,7 @@ const handleChapterAdd = (newChapter) => {
 .favorite-item-title {
   font-size: 14px;
   font-weight: bold;
-  color: #008AC5;
+  color: #276884;
   flex: 1;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
 }
@@ -1158,6 +1152,29 @@ const handleChapterAdd = (newChapter) => {
 }
 
 @media (max-width: 768px) {
+  .header {
+    padding: 0 16px;
+  }
+  
+  .username {
+    font-size: 14px;
+  }
+  
+  .avatar {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .back-button {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .back-icon {
+    width: 18px;
+    height: 18px;
+  }
+  
   .main-layout {
     flex-direction: column;
   }
@@ -1217,21 +1234,30 @@ const handleChapterAdd = (newChapter) => {
 
 @media (max-width: 480px) {
   .header {
-    padding: 0 16px;
+    padding: 0 12px;
   }
   
   .username {
-    font-size: 14px;
+    font-size: 12px;
   }
   
-  .back-icon img {
-    width: 20px;
-    height: 20px;
+  .user-info {
+    gap: 8px;
   }
   
   .avatar {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
+  }
+  
+  .back-button {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .back-icon {
+    width: 16px;
+    height: 16px;
   }
   
   .course-card {
@@ -1324,7 +1350,7 @@ const handleChapterAdd = (newChapter) => {
 .popup-title {
   font-size: 18px;
   font-weight: bold;
-  color: #008AC5;
+  color: #276884;
   margin: 0 0 20px 0;
   text-align: center;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
@@ -1368,14 +1394,14 @@ const handleChapterAdd = (newChapter) => {
 .upload-hint svg {
   width: 48px;
   height: 48px;
-  color: #008AC5;
+  color: #276884;
   opacity: 0.6;
 }
 
 .upload-hint p {
   margin: 0;
   font-size: 14px;
-  color: #008AC5;
+  color: #276884;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
 }
 

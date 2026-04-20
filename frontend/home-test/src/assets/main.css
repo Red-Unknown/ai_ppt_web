@@ -1,8 +1,74 @@
 /* src/assets/main.css */
-@tailwind base;    /* 引入 Tailwind 的基础样式（如默认的标签样式） */
-@tailwind components; /* 引入 Tailwind 的组件类（如按钮、卡片等） */
-@tailwind utilities;  /* 引入 Tailwind 的工具类（如间距、颜色、布局等） */
-/* main.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 基础主题变量 - 默认使用教师端蓝色主题 */
+:root {
+  --theme-primary: #008AC5;
+  --theme-secondary: #276884;
+  --theme-tertiary: #1d5369;
+  --theme-background: #CDF4FF;
+  --theme-surface: #F2FCFF;
+  --theme-text-primary: #276884;
+  --theme-text-secondary: #008AC5;
+  --theme-text-tertiary: #1d5369;
+  --theme-text-inverse: #CDF4FF;
+  --theme-border: #008AC5;
+  --theme-hover-primary: #006B9A;
+  --theme-hover-background: rgba(205, 244, 255, 0.5);
+  --theme-shadow: rgba(0, 138, 197, 0.1);
+  --theme-primary-opacity-20: rgba(0, 138, 197, 0.2);
+  --theme-primary-opacity-30: rgba(0, 138, 197, 0.3);
+  --theme-shadow-medium: rgba(0, 138, 197, 0.2);
+  --theme-primary-mix-5: #f0f8ff;
+  --theme-primary-mix-10: #e0f0ff;
+}
+
+/* 蓝色主题（教师端）*/
+.theme-blue {
+  --theme-primary: #008AC5;
+  --theme-secondary: #276884;
+  --theme-tertiary: #1d5369;
+  --theme-background: #CDF4FF;
+  --theme-surface: #F2FCFF;
+  --theme-text-primary: #276884;
+  --theme-text-secondary: #008AC5;
+  --theme-text-tertiary: #1d5369;
+  --theme-text-inverse: #CDF4FF;
+  --theme-border: #008AC5;
+  --theme-hover-primary: #006B9A;
+  --theme-hover-background: rgba(205, 244, 255, 0.5);
+  --theme-shadow: rgba(0, 138, 197, 0.1);
+  --theme-primary-opacity-20: rgba(0, 138, 197, 0.2);
+  --theme-primary-opacity-30: rgba(0, 138, 197, 0.3);
+  --theme-shadow-medium: rgba(0, 138, 197, 0.2);
+  --theme-primary-mix-5: #f0f8ff;
+  --theme-primary-mix-10: #e0f0ff;
+}
+
+/* 橙色主题（学生端）*/
+.theme-orange {
+  --theme-primary: #F18B5B;
+  --theme-secondary: #F18B5B;
+  --theme-tertiary: #F18B5B;
+  --theme-background: #FFE6CE;
+  --theme-surface: #FFF5E7;
+  --theme-text-primary: #F18B5B;
+  --theme-text-secondary: #F18B5B;
+  --theme-text-tertiary: #F18B5B;
+  --theme-text-inverse: #FFFFFF;
+  --theme-border: #F18B5B;
+  --theme-hover-primary: #E86A3F;
+  --theme-hover-background: rgba(255, 245, 231, 0.5);
+  --theme-shadow: rgba(241, 139, 91, 0.1);
+  --theme-primary-opacity-20: rgba(241, 139, 91, 0.2);
+  --theme-primary-opacity-30: rgba(241, 139, 91, 0.3);
+  --theme-shadow-medium: rgba(241, 139, 91, 0.2);
+  --theme-primary-mix-5: #fff8f3;
+  --theme-primary-mix-10: #fff0e6;
+}
+
 body {
   background-color: #f5f5f5;
 }

@@ -4,7 +4,7 @@
     <div class="fixed-header">
   <div class="title-container">
     <div class="sidebar-title">章节</div>
-    <div class="title-actions">
+    <div class="title-actions" v-if="theme === 'blue'">
       <button class="action-btn delete-btn" @click="enterDeleteMode">
         <svg viewBox="0 0 24 24" fill="currentColor">
           <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
@@ -27,9 +27,10 @@
         :key="chapter.id"
         class="chapter-item"
         :data-id="chapter.id"
+        :class="{ 'selected': chapter.id === selectedChapter }"
         @click="handleSelect(chapter)"
       >
-        <span v-if="isDeleteMode" class="delete-icon" @click.stop="confirmDeleteChapter(chapter)">
+        <span v-if="isDeleteMode && theme === 'blue'" class="delete-icon" @click.stop="confirmDeleteChapter(chapter)">
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
           </svg>
@@ -63,12 +64,71 @@
 
 <script>
 import { ref, watch, onMounted } from 'vue'
+
+/**
+ * 章节侧边栏组件
+ * @description 显示课程章节列表，支持章节选择、添加和删除
+ * @example
+ * <ChapterSidebar
+ *   :chapters="chaptersList"
+ *   :selected-chapter="currentChapterId"
+ *   theme="blue"
+ *   @select="handleSelectChapter"
+ *   @add="handleAddChapter"
+ *   @delete="handleDeleteChapter"
+ * />
+ */
 export default {
   name: 'ChapterSidebar',
   props: {
-    chapters: { type: Array, default: () => [] },
+    /**
+     * 章节列表数据
+     * @type {Array<{id: string, name: string, isCollected?: boolean}>}
+     * @default []
+     */
+    chapters: { 
+      type: Array, 
+      default: () => [],
+      validator: (value) => {
+        if (!Array.isArray(value)) {
+          console.warn('[ChapterSidebar] chapters must be an array')
+          return false
+        }
+        const isValid = value.every(chapter => 
+          typeof chapter === 'object' && 
+          chapter !== null && 
+          typeof chapter.id === 'string' && 
+          typeof chapter.name === 'string'
+        )
+        if (!isValid) {
+          console.warn('[ChapterSidebar] Each chapter must have id and name properties')
+        }
+        return isValid
+      }
+    },
+    /**
+     * 当前选中的章节ID
+     * @type {string}
+     * @default ''
+     */
     selectedChapter: { type: String, default: '' },
-    theme: { type: String, default: 'blue' } // 'blue' 或 'orange'
+    /**
+     * 主题类型
+     * @type {'blue' | 'orange'}
+     * @default 'blue'
+     */
+    theme: { 
+      type: String, 
+      default: 'blue',
+      validator: (value) => {
+        const validThemes = ['blue', 'orange']
+        if (!validThemes.includes(value)) {
+          console.warn(`[ChapterSidebar] Invalid theme: "${value}". Must be one of: ${validThemes.join(', ')}`)
+          return false
+        }
+        return true
+      }
+    }
   },
   emits: ['select', 'collect', 'delete', 'add'],
   setup(props, { emit }) {
@@ -137,8 +197,8 @@ export default {
         highlightIndicatorRef.value.style.transition = 'all 0.4s ease'
         highlightIndicatorRef.value.style.top = `${relativeTop}px`
         highlightIndicatorRef.value.style.height = `${height}px`
-        highlightIndicatorRef.value.style.width = `${width}px`
-        highlightIndicatorRef.value.style.left = `${left - listRect.left}px`
+        highlightIndicatorRef.value.style.width = `${width - 8}px`
+        highlightIndicatorRef.value.style.left = `${left - listRect.left + 8}px`
       }
     }
 
@@ -185,114 +245,72 @@ export default {
   position: relative;
   display: flex;
   flex-direction: column;
+  background-color: var(--theme-background);
+  box-shadow: -4px 0 12px var(--theme-shadow);
 }
 
-/* 蓝色主题（教师端） */
-.chapter-sidebar.theme-blue {
-  background-color: #E1F4FF;
-  box-shadow: -4px 0 12px rgba(0, 138, 197, 0.1);
+.sidebar-title {
+  color: var(--theme-text-primary);
 }
 
-.theme-blue .sidebar-title {
-  color: #008AC5;
+.divider {
+  background-color: var(--theme-border);
 }
 
-.theme-blue .divider {
-  background-color: #008AC5;
+.action-btn {
+  background: var(--theme-primary-opacity-20);
+  color: var(--theme-text-primary);
 }
 
-.theme-blue .action-btn {
-  background: rgba(0, 138, 197, 0.2);
-  color: #008AC5;
+.action-btn:hover {
+  background: var(--theme-primary-opacity-30);
+  transform: scale(1.1);
 }
 
-.theme-blue .action-btn:hover {
-  background: rgba(0, 138, 197, 0.3);
+.delete-btn:hover {
+  background: rgba(255, 0, 0, 0.3);
+  color: white;
 }
 
-.theme-blue .chapter-item {
-  color: #008AC5;
+.add-btn:hover {
+  background: rgba(0, 255, 0, 0.3);
+  color: white;
 }
 
-.theme-blue .chapter-item:hover {
-  background-color: rgba(205, 244, 255, 0.5);
+.chapter-item {
+  color: var(--theme-text-primary);
 }
 
-.theme-blue .delete-icon {
-  color: #008AC5;
+.chapter-item:hover {
+  background-color: var(--theme-hover-background);
 }
 
-.theme-blue .highlight-indicator {
-  background-color: #FFFFFF;
-  box-shadow: 0 2px 4px rgba(0, 138, 197, 0.2);
+.chapter-item.selected:hover {
+  background-color: transparent;
 }
 
-.theme-blue .popup-title,
-.theme-blue .popup-input {
-  color: #008AC5;
-  border-color: #008AC5;
+.delete-icon {
+  color: var(--theme-text-primary);
 }
 
-.theme-blue .btn-confirm {
-  background: #008AC5;
+.highlight-indicator {
+  background-color: var(--theme-surface);
+  box-shadow: 0 2px 4px var(--theme-shadow-medium);
+  border-radius: 12px 0 0 12px;
 }
 
-.theme-blue .btn-confirm:hover {
-  background: #006B9A;
+.popup-title,
+.popup-input {
+  color: var(--theme-text-primary);
+  border-color: var(--theme-border);
 }
 
-/* 暖橙色主题（学生端） */
-.chapter-sidebar.theme-orange {
-  background-color: #FFE6CE;
-  box-shadow: -4px 0 12px rgba(241, 139, 91, 0.1);
+.btn-confirm {
+  background: var(--theme-primary);
 }
 
-.theme-orange .sidebar-title {
-  color: #C96030;
-}
-
-.theme-orange .divider {
-  background-color: #C96030;
-}
-
-.theme-orange .action-btn {
-  background: rgba(201, 96, 48, 0.2);
-  color: #C96030;
-}
-
-.theme-orange .action-btn:hover {
-  background: rgba(201, 96, 48, 0.3);
-}
-
-.theme-orange .chapter-item {
-  color: #C96030;
-}
-
-.theme-orange .chapter-item:hover {
-  background-color: rgba(255, 245, 231, 0.5);
-}
-
-.theme-orange .delete-icon {
-  color: #C96030;
-}
-
-.theme-orange .highlight-indicator {
-  background-color: #FFF5E7;
-  box-shadow: 0 2px 4px rgba(241, 139, 91, 0.2);
-}
-
-.theme-orange .popup-title,
-.theme-orange .popup-input {
-  color: #C96030;
-  border-color: #C96030;
-}
-
-.theme-orange .btn-confirm {
-  background: #F18B5B;
-}
-
-.theme-orange .btn-confirm:hover {
-  background: #E86A3F;
+.btn-confirm:hover {
+  background: var(--theme-hover-primary);
 }
 
 /* 固定标题区域 */
@@ -430,6 +448,10 @@ export default {
   font-weight: bold;
 }
 
+.chapter-item.selected .chapter-name {
+  font-weight: bold;
+}
+
 /* 弹窗样式 */
 .popup-overlay {
   position: fixed;
@@ -519,6 +541,7 @@ export default {
 }
 
 .btn-confirm {
+  background: #008AC5;
   color: white;
 }
 

@@ -1,15 +1,11 @@
 <template>
   <div class="screen">
     <!-- 顶部栏 -->
-    <div class="header" :class="{ 'header-shadow': isScrolled }">
-      <button class="back-icon" @click="goBack">
-        <img src="@/assets/images/action/ic-arrow_left.svg" alt="返回" />
-      </button>
-      <div class="user-info">
-        <div class="avatar" @click="showUserInfoPopup = true"></div>
-        <span class="username">你好，{{ userName }}同学</span>
-      </div>
-    </div>
+    <AppHeader 
+      :user-name="userName"
+      @back="goBack"
+      @avatar-click="handleAvatarClick"
+    />
 
     <!-- 主体布局 -->
     <div class="main-layout">
@@ -145,10 +141,24 @@
     <!-- 用户信息弹窗 -->
     <UserInfoPopup
       v-if="showUserInfoPopup"
-      :user-info="userInfo"
+      :user-info="userStore.userInfo"
       @close="showUserInfoPopup = false"
       @menu-click="handleMenuClick"
       @logout="handleLogout"
+    />
+    
+    <!-- 个人资料编辑弹窗 -->
+    <ProfileEditPopup
+      v-if="showProfileEditPopup"
+      :user-info="userStore.userInfo"
+      @close="showProfileEditPopup = false"
+      @save="saveProfile"
+    />
+    
+    <!-- 关于我们弹窗 -->
+    <AboutUsPopup
+      v-if="showAboutUsPopup"
+      @close="showAboutUsPopup = false"
     />
   </div>
 </template>
@@ -159,6 +169,10 @@ import StartLearningPopup from '@/components/StartLearningPopup.vue'
 import SubjectSidebar from '@/components/SubjectSidebar.vue'
 import ChapterSidebar from '@/components/ChapterSidebar.vue'
 import UserInfoPopup from '@/components/UserInfoPopup.vue'
+import ProfileEditPopup from '@/components/ProfileEditPopup.vue'
+import AboutUsPopup from '@/components/AboutUsPopup.vue'
+import AppHeader from '@/components/AppHeader.vue'
+import { useUserStore } from '@/stores/userStore'
 
 // 预览模式状态
 const isPreviewMode = ref(false)
@@ -310,17 +324,19 @@ const favoriteCourses = computed(() => {
 })
 
 // 用户名
-const userName = ref('学生')
+const userStore = useUserStore()
 
-// 用户信息
-const userInfo = ref({
-  name: '学生',
-  studentId: '20260001',
-  major: '计算机科学与技术'
-})
+// 用户名
+const userName = computed(() => userStore.userName)
 
 // 用户信息弹窗状态
 const showUserInfoPopup = ref(false)
+
+// 个人资料编辑弹窗状态
+const showProfileEditPopup = ref(false)
+
+// 关于我们弹窗状态
+const showAboutUsPopup = ref(false)
 
 // 检查是否为开发环境
 const isDevelopment = () => {
@@ -357,6 +373,9 @@ const togglePreviewMode = () => {
 
 // 生命周期钩子
 onMounted(async () => {
+  // 加载用户信息
+  userStore.loadUserInfo()
+  
   // 检查是否启用预览模式
   isPreviewMode.value = checkPreviewMode()
   showPreviewModeIndicator.value = isPreviewMode.value
@@ -441,6 +460,7 @@ const handleMenuClick = (menuItem) => {
   switch (menuItem) {
     case 'profile':
       // 处理个人资料
+      showProfileEditPopup.value = true
       break
     case 'settings':
       // 处理设置
@@ -450,6 +470,7 @@ const handleMenuClick = (menuItem) => {
       break
     case 'about':
       // 处理关于我们
+      showAboutUsPopup.value = true
       break
     default:
       break
@@ -513,6 +534,18 @@ const handleChapterAdd = (newChapter) => {
   // 选中新添加的章节
   currentChapter.value = newChapter
 }
+
+// 保存个人资料
+const saveProfile = (updatedInfo) => {
+  console.log('保存个人资料:', updatedInfo)
+  userStore.updateUserInfo(updatedInfo)
+  // 这里可以添加保存到服务器的逻辑
+}
+
+// 处理头像点击
+const handleAvatarClick = () => {
+  showUserInfoPopup.value = true
+}
 </script>
 
 <style scoped>
@@ -556,75 +589,6 @@ const handleChapterAdd = (newChapter) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-/* 顶部栏 */
-.header {
-  height: 60px;
-  background: #FFFFFF;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  z-index: 100;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.back-icon {
-  width: 40px;
-  height: 40px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.back-icon:hover {
-  transform: translateX(-2px);
-}
-
-.back-icon img {
-  width: 24px;
-  height: 24px;
-  transition: all 0.2s ease;
-}
-
-.back-icon:hover img {
-  filter: invert(70%) sepia(30%) saturate(300%) hue-rotate(340deg) brightness(90%) contrast(90%);
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #F18B5B;
-  transition: all 0.2s ease;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: bold;
-}
-
-.avatar:hover {
-  box-shadow: 0 0 0 4px rgba(241, 139, 91, 0.2);
-}
-
-.username {
-  font-size: 16px;
-  color: #C96030;
-  font-weight: 400;
-  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
 }
 
 /* 主体布局 */
@@ -718,7 +682,7 @@ const handleChapterAdd = (newChapter) => {
   background: #FFFFFF;
   transition: all 0.2s ease;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
-  background-image: url('@/assets/images/action/ic-Search.svg');
+  background-image: url('@/assets/images/action/ic-Search2.svg');
   background-repeat: no-repeat;
   background-position: 8px center;
   background-size: 16px 16px;
