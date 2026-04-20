@@ -9,7 +9,7 @@ try:
     from backend.app.models.qa import QARecord
     from backend.app.models.progress import LearningProgress
     from backend.app.models.subject import Subject, Chapter
-    from backend.app.models.course_new import Course as NewCourse, Slide, CourseDocument, LessonPlan
+    from backend.app.models.course_new import NewCourse, Slide, CourseDocument, LessonPlan
     from backend.app.models.ppt import PPT
 except ImportError:
     from app.models.user import User
@@ -18,7 +18,7 @@ except ImportError:
     from app.models.qa import QARecord
     from app.models.progress import LearningProgress
     from app.models.subject import Subject, Chapter
-    from app.models.course_new import Course as NewCourse, Slide, CourseDocument, LessonPlan
+    from app.models.course_new import NewCourse, Slide, CourseDocument, LessonPlan
     from app.models.ppt import PPT
 
 __all__ = [

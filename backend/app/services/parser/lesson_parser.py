@@ -36,19 +36,24 @@ class LessonParserService:
     ):
         self.vision_api_key = (
             vision_api_key
+            or settings.IMAGE_VLM_API_KEY
+            or settings.QWEN_API_KEY
             or os.getenv("IMAGE_VLM_API_KEY")
             or os.getenv("QWEN_API_KEY")
-            or os.getenv("OPENAI_API_KEY")
             or ""
         )
         self.vision_base_url = (
             vision_base_url
+            or settings.IMAGE_VLM_BASE_URL
+            or settings.QWEN_BASE_URL
             or os.getenv("IMAGE_VLM_BASE_URL")
             or os.getenv("QWEN_BASE_URL")
             or "https://dashscope.aliyuncs.com/compatible-mode/v1"
         )
         self.vision_model = (
             vision_model
+            or settings.IMAGE_VLM_MODEL
+            or settings.QWEN_VISION_MODEL
             or os.getenv("IMAGE_VLM_MODEL")
             or os.getenv("QWEN_VISION_MODEL")
             or "qwen-vl-plus"

@@ -12,7 +12,7 @@ except ImportError:
     from app.core.database import Base
 
 
-class Course(Base):
+class NewCourse(Base):
     """课程表"""
     __tablename__ = "courses"
     __table_args__ = {'extend_existing': True}
@@ -33,7 +33,7 @@ class Course(Base):
     lesson_plans = relationship("LessonPlan", back_populates="course", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<Course(id={self.id}, title={self.title})>"
+        return f"<NewCourse(id={self.id}, title={self.title})>"
 
 
 class Slide(Base):
@@ -49,7 +49,7 @@ class Slide(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
 
     # 关联关系
-    course = relationship("Course", back_populates="slides")
+    course = relationship("NewCourse", back_populates="slides")
 
     def __repr__(self):
         return f"<Slide(id={self.id}, course_id={self.course_id}, index={self.slide_index})>"
@@ -68,7 +68,7 @@ class CourseDocument(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
 
     # 关联关系
-    course = relationship("Course", back_populates="documents")
+    course = relationship("NewCourse", back_populates="documents")
 
     def __repr__(self):
         return f"<CourseDocument(id={self.id}, title={self.title})>"
@@ -85,7 +85,7 @@ class LessonPlan(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
 
     # 关联关系
-    course = relationship("Course", back_populates="lesson_plans")
+    course = relationship("NewCourse", back_populates="lesson_plans")
 
     def __repr__(self):
         return f"<LessonPlan(id={self.id}, course_id={self.course_id})>"

@@ -148,6 +148,7 @@ async def handle_full_pipeline(websocket: WebSocket, data: dict):
         ):
             await websocket.send_json(event)
     except Exception as e:
-        await websocket.send_json({"type": "error", "error": str(e)})
+        err_msg = str(e) or repr(e) or f"{type(e).__name__}"
+        await websocket.send_json({"type": "error", "error": err_msg, "error_type": type(e).__name__})
     finally:
         await websocket.close()

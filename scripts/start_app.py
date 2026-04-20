@@ -7,6 +7,7 @@ import argparse
 import shutil
 import re
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Configuration
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -14,6 +15,9 @@ BACKEND_DIR = ROOT_DIR / "backend"
 FRONTEND_DIR = ROOT_DIR / "frontend"
 BACKEND_PORT = 8001
 FRONTEND_PORT = 5173
+
+# Load persistent environment from project .env
+load_dotenv(ROOT_DIR / ".env")
 
 # Use ai_ppt_web conda environment Python
 CONDA_ENV_NAME = "ai_ppt_web"

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import subprocess
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -8,7 +9,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from backend.app.core.database import SessionLocal
 from backend.app.models.cir import CIRSection
-from backend.app.models.course import Lesson
+from backend.app.models.course import Course, Lesson
 from backend.app.services.parser.generate_mindmap import generate_mindmap_async
 from backend.app.services.parser.lesson_parser import LessonParserService
 from backend.app.services.script.async_tts_service import async_tts_service
@@ -134,7 +135,7 @@ def _build_cir_rows(parsed_json: Dict[str, Any], lesson_id: str, school_id: str)
     return rows
 
 
-async def _run_qdrant_ingest(raw_json_path: Path, lesson_id: str, school_id: str) -> Tuple[bool, str]:
+def _run_qdrant_ingest_sync(raw_json_path: Path, lesson_id: str, school_id: str) -> Tuple[bool, str]:
     script_path = Path("scripts/indexing/ingest_to_qdrant.py")
     cmd = [
         sys.executable,
@@ -147,19 +148,32 @@ async def _run_qdrant_ingest(raw_json_path: Path, lesson_id: str, school_id: str
         school_id,
         "--rebuild",
     ]
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
     )
-    out, _ = await proc.communicate()
-    text = out.decode("utf-8", errors="ignore")
+    text = f"{proc.stdout or ''}{proc.stderr or ''}"
     return proc.returncode == 0, text
+
+
+async def _run_qdrant_ingest(raw_json_path: Path, lesson_id: str, school_id: str) -> Tuple[bool, str]:
+    return await asyncio.to_thread(_run_qdrant_ingest_sync, raw_json_path, lesson_id, school_id)
 
 
 def _fallback_script_content(node_name: str, teaching_content: str) -> str:
     base = (teaching_content or node_name or "").strip()
     return base if base else "本节内容待补充。"
+
+
+def _sanitize_text_for_ws(text: str, limit: int = 2000) -> str:
+    if not text:
+        return ""
+    safe = text.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+    safe = "".join(ch for ch in safe if ch == "\n" or ch == "\r" or ch == "\t" or ord(ch) >= 32)
+    return safe[-limit:]
 
 
 async def run_full_pipeline(
@@ -176,6 +190,28 @@ async def run_full_pipeline(
 ) -> AsyncGenerator[Dict[str, Any], None]:
     start = datetime.now(timezone.utc)
     yield {"type": "status", "step": "start", "message": "开始执行全流程"}
+
+    def _validate_course() -> Tuple[bool, str]:
+        if not course_id:
+            return False, "缺少必填参数: course_id。请先创建课程主数据并传入有效 course_id。"
+        db = SessionLocal()
+        try:
+            course = db.query(Course).filter(Course.course_id == course_id).first()
+            if not course:
+                return False, f"course_id 不存在: {course_id}。请先在 courses 表创建该课程。"
+            if school_id and course.school_id and course.school_id != school_id:
+                return (
+                    False,
+                    f"course_id 与 school_id 不匹配: course.school_id={course.school_id}, request.school_id={school_id}",
+                )
+            return True, ""
+        finally:
+            db.close()
+
+    ok_course, course_error = await asyncio.to_thread(_validate_course)
+    if not ok_course:
+        yield {"type": "error", "step": "validate_course", "error": course_error}
+        return
 
     parser = LessonParserService()
     parsed = await asyncio.to_thread(parser.parse_courseware, file_path, file_type)
@@ -359,6 +395,6 @@ async def run_full_pipeline(
                 db.close()
 
         await asyncio.to_thread(_mark_failed)
-    yield {"type": "status", "step": "qdrant", "ok": ok, "log": qdrant_log[-2000:]}
+    yield {"type": "status", "step": "qdrant", "ok": ok, "log": _sanitize_text_for_ws(qdrant_log, limit=2000)}
     elapsed_s = (datetime.now(timezone.utc) - start).total_seconds()
     yield {"type": "done", "step": "end", "lesson_id": final_lesson_id, "elapsed_seconds": round(elapsed_s, 3)}

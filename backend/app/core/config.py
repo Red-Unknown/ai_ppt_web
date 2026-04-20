@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     QWEN_TEMPERATURE: float = 0.7
     QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
+    # Image parsing model configuration.
+    # By default, image parsing reuses Qwen vision settings, but can be overridden.
+    IMAGE_VLM_API_KEY: str = ""
+    IMAGE_VLM_BASE_URL: str = ""
+    IMAGE_VLM_MODEL: str = ""
+
     # Feature Flags
     ENABLE_SUGGESTIONS: bool = True
 
