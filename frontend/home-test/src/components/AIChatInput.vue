@@ -107,8 +107,9 @@ const toggleVoiceInput = () => {
 }
 
 const initVoiceRecognition = () => {
-  if ('webkitSpeechRecognition' in window) {
-    recognition = new webkitSpeechRecognition()
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (SpeechRecognition) {
+    recognition = new SpeechRecognition()
     recognition.continuous = true
     recognition.interimResults = true
     recognition.lang = 'zh-CN'
@@ -133,6 +134,8 @@ const initVoiceRecognition = () => {
     recognition.onend = () => {
       // 保持isVoiceInputActive状态，只有手动停止时才设为false
     }
+  } else {
+    console.warn('当前浏览器不支持语音识别功能')
   }
 }
 

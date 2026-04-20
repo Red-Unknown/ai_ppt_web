@@ -611,6 +611,7 @@ import AIChatInput from '../components/AIChatInput.vue'
 import Loading from '../components/Loading.vue'
 import AIAssistantPanel from '../components/AIAssistantPanel.vue'
 import UserInfoPopup from '../components/UserInfoPopup.vue'
+import { startChatSession, createChatSSE, sendChatMessage } from '../services/apiService.js'
 
 // 用户信息
 const userInfo = ref({
@@ -655,6 +656,8 @@ const historyDetailMessages = ref([])
 // 当前查看的历史对话详情
 const selectedHistoryItem = ref(null)
 const showHistoryDetail = ref(false)
+// SSE连接
+const sseConnection = ref(null)
 
 // 教案区状态切换按钮
 const lessonPanelState = ref(localStorage.getItem('lessonPanelState') === 'true')
@@ -1230,7 +1233,7 @@ const handleRemoveContent = (index) => {
 }
 
 // 处理发送问题（课件标签）
-const handleSendQuestion = (text) => {
+const handleSendQuestion = async (text) => {
   console.log('发送问题:', text)
   console.log('添加的内容:', addedContents.value)
   
@@ -1249,11 +1252,11 @@ const handleSendQuestion = (text) => {
   questionText.value = ''
   addedContents.value = []
   
-  simulateAIResponse()
+  await simulateAIResponse()
 }
 
 // 处理发送消息（通用）
-const handleSendMessage = (text) => {
+const handleSendMessage = async (text) => {
   if (!text.trim()) return
   
   if (showHistoryDetail.value && selectedHistoryItem.value) {
@@ -1274,7 +1277,7 @@ const handleSendMessage = (text) => {
       content: text
     })
     
-    simulateAIResponse()
+    await simulateAIResponse()
   }
   
   questionText.value = ''
@@ -1285,14 +1288,50 @@ const sendMessageFromInput = () => {
   handleSendMessage(questionText.value)
 }
 
-// 模拟AI回复
-const simulateAIResponse = () => {
-  setTimeout(() => {
-    aiMessages.value.push({
-      type: 'ai',
-      content: '选中目标图层：在左侧 Layers 面板里，选中你要处理的图标（比如图中的 Volume 2 或 mic 图层）。\n扁平化 / 轮廓化：\n• 如果是文字 / 形状组合：先右键 → Flatten（扁平化），把组合变成单一形状。\n• 如果是描边线条：选中线条 → 右侧面板 Stroke → 点击 Outline stroke（轮廓化描边），把线条变成可编辑的填充形状。\n布尔运算合并：\n• 选中所有组成图标的形状图层 → 顶部工具栏选择 Union selection（合并），把多个形状合并成一个矢量路径。\n• 如果有镂空部分，用 Subtract selection（减去）来实现。'
+// 发送消息到后端并获取AI回复
+const simulateAIResponse = async () => {
+  try {
+    isGlobalLoading.value = true
+    loadingText.value = 'AI正在思考...'
+    
+    // 启动聊天会话
+    await startChatSession()
+    
+    // 发送消息
+    const lastUserMessage = aiMessages.value.filter(msg => msg.type === 'user').pop()
+    if (lastUserMessage) {
+      const messageContent = typeof lastUserMessage.content === 'object' 
+        ? lastUserMessage.content.text 
+        : lastUserMessage.content
+      
+      await sendChatMessage(messageContent)
+    }
+    
+    // 建立SSE连接获取响应
+    if (sseConnection.value) {
+      sseConnection.value.close()
+    }
+    
+    sseConnection.value = createChatSSE((data) => {
+      if (data.answer) {
+        aiMessages.value.push({
+          type: 'ai',
+          content: data.answer
+        })
+      }
     })
-  }, 1000)
+  } catch (error) {
+    console.error('获取AI回复失败:', error)
+    // 失败时使用模拟回复
+    setTimeout(() => {
+      aiMessages.value.push({
+        type: 'ai',
+        content: '选中目标图层：在左侧 Layers 面板里，选中你要处理的图标（比如图中的 Volume 2 或 mic 图层）。\n扁平化 / 轮廓化：\n• 如果是文字 / 形状组合：先右键 → Flatten（扁平化），把组合变成单一形状。\n• 如果是描边线条：选中线条 → 右侧面板 Stroke → 点击 Outline stroke（轮廓化描边），把线条变成可编辑的填充形状。\n布尔运算合并：\n• 选中所有组成图标的形状图层 → 顶部工具栏选择 Union selection（合并），把多个形状合并成一个矢量路径。\n• 如果有镂空部分，用 Subtract selection（减去）来实现。'
+      })
+    }, 1000)
+  } finally {
+    isGlobalLoading.value = false
+  }
 }
 
 // 打开历史对话详情
@@ -1592,6 +1631,11 @@ onMounted(() => {
   document.addEventListener('msfullscreenchange', handleFullscreenChange)
   
   return () => {
+    // 关闭SSE连接
+    if (sseConnection.value) {
+      sseConnection.value.close()
+    }
+    
     window.removeEventListener('scroll', handleScroll)
     document.removeEventListener('fullscreenchange', handleFullscreenChange)
     document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
