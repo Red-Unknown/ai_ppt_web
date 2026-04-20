@@ -1,0 +1,20 @@
+## 模块规范 (Modules)
+
+### 目录结构规范 (Directory Layout)
+
+严格遵守已有目录结构，严禁随意在根目录新建文件。
+
+### 测试文件规范
+
+测试文件、测试使用脚本必须放在 `tests/` 目录下。
+
+- 单元测试：`tests/unit/`
+- 集成测试：`tests/integration/`
+- E2E 测试：`tests/e2e/`
+- 测试脚本：`tests/scripts/`
+
+### 个人调试空间 
+
+* **位置**：`sandbox/`
+* **规则**：
+  * `sandbox/` 目录下的内容（除 `.keep` 外）已被 `.gitignore` 忽略。

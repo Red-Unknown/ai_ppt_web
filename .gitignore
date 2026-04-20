@@ -25,6 +25,9 @@ Scripts/
 *.swp
 *.swo
 
+# Cursor Editor
+.cursor/
+
 # Trae Editor
 # 1. 先忽略 .trae 下的所有内容
 .trae/*
