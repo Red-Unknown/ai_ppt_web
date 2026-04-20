@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -13,7 +12,10 @@ from backend.app.models.course import Lesson
 from backend.app.services.parser.generate_mindmap import generate_mindmap_async
 from backend.app.services.parser.lesson_parser import LessonParserService
 from backend.app.services.script.async_tts_service import async_tts_service
-from backend.app.services.script_generator import generate_script_for_node
+try:
+    from backend.app.services.script_generator import generate_script_for_node
+except Exception:
+    generate_script_for_node = None
 
 
 def _extract_content_by_page(json_data: Dict[str, Any]) -> List[str]:
@@ -155,6 +157,11 @@ async def _run_qdrant_ingest(raw_json_path: Path, lesson_id: str, school_id: str
     return proc.returncode == 0, text
 
 
+def _fallback_script_content(node_name: str, teaching_content: str) -> str:
+    base = (teaching_content or node_name or "").strip()
+    return base if base else "本节内容待补充。"
+
+
 async def run_full_pipeline(
     file_path: str,
     file_type: str,
@@ -179,7 +186,13 @@ async def run_full_pipeline(
     await asyncio.to_thread(
         lambda: raw_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     )
-    yield {"type": "status", "step": "raw_json", "path": str(raw_json_path), "lesson_id": final_lesson_id}
+    yield {
+        "type": "status",
+        "step": "vl_llm_parse_complete",
+        "path": str(raw_json_path),
+        "lesson_id": final_lesson_id,
+        "message": "课件解析完成（含图片理解）",
+    }
 
     pages = await asyncio.to_thread(_extract_content_by_page, payload)
     content_text = "\n\n".join(pages)
@@ -188,10 +201,10 @@ async def run_full_pipeline(
     await asyncio.to_thread(lambda: txt_path.write_text(content_text + ("\n" if content_text else ""), encoding="utf-8-sig"))
     yield {"type": "status", "step": "content_text", "pages": len(pages), "path": str(txt_path)}
 
-    mind_map, keywords = await generate_mindmap_async(content_text)
-    yield {"type": "status", "step": "mind_map", "keywords_count": len(keywords)}
-
     cir_rows = _build_cir_rows(payload, final_lesson_id, school_id)
+
+    async def _generate_mind_map() -> Tuple[Any, List[str]]:
+        return await generate_mindmap_async(content_text)
 
     def _save_base_rows() -> int:
         db = SessionLocal()
@@ -209,7 +222,6 @@ async def run_full_pipeline(
                     file_info=payload.get("data", {}).get("fileInfo"),
                 )
                 db.add(lesson)
-            lesson.mind_map = {"mind_map": mind_map, "keywords": keywords}
             db.query(CIRSection).filter(CIRSection.lesson_id == final_lesson_id).delete()
             for row in cir_rows:
                 db.add(
@@ -234,29 +246,71 @@ async def run_full_pipeline(
         finally:
             db.close()
 
-    inserted = await asyncio.to_thread(_save_base_rows)
-    yield {"type": "status", "step": "postgres_cir_base", "inserted_nodes": inserted}
+    def _generate_scripts_in_memory() -> Tuple[Dict[str, str], int]:
+        script_map: Dict[str, str] = {}
+        generated = 0
+        for row in cir_rows:
+            if row.get("node_type") != "subchapter":
+                continue
+            node_id = row.get("node_id")
+            node_name = row.get("node_name") or ""
+            teaching_content = row.get("teaching_content") or ""
+            if generate_script_for_node:
+                class _Node:
+                    def __init__(self, node_name: str, teaching_content: str) -> None:
+                        self.node_name = node_name
+                        self.teaching_content = teaching_content
 
-    def _generate_scripts() -> int:
+                content = generate_script_for_node(_Node(node_name, teaching_content), use_llm=enable_script_llm)
+            else:
+                content = _fallback_script_content(node_name, teaching_content)
+            script_map[node_id] = content
+            generated += 1
+        return script_map, generated
+
+    parallel_tasks = {
+        "mind_map": asyncio.create_task(_generate_mind_map()),
+        "postgres_cir_base": asyncio.create_task(asyncio.to_thread(_save_base_rows)),
+        "script": asyncio.create_task(asyncio.to_thread(_generate_scripts_in_memory)),
+    }
+    mind_map = None
+    keywords: List[str] = []
+    inserted = 0
+    script_map: Dict[str, str] = {}
+    script_count = 0
+
+    pending = dict(parallel_tasks)
+    while pending:
+        done, _ = await asyncio.wait(pending.values(), return_when=asyncio.FIRST_COMPLETED)
+        for finished in done:
+            key = next(name for name, task in pending.items() if task is finished)
+            result = finished.result()
+            if key == "mind_map":
+                mind_map, keywords = result
+                yield {"type": "status", "step": "mind_map", "keywords_count": len(keywords)}
+            elif key == "postgres_cir_base":
+                inserted = int(result)
+                yield {"type": "status", "step": "postgres_cir_base", "inserted_nodes": inserted}
+            elif key == "script":
+                script_map, script_count = result
+                yield {"type": "status", "step": "script", "generated": script_count, "llm": bool(enable_script_llm and generate_script_for_node)}
+            pending.pop(key)
+
+    def _apply_parallel_outputs() -> None:
         db = SessionLocal()
         try:
-            nodes = (
-                db.query(CIRSection)
-                .filter(CIRSection.lesson_id == final_lesson_id, CIRSection.node_type == "subchapter")
-                .order_by(CIRSection.sort_order.asc())
-                .all()
-            )
-            cnt = 0
+            lesson = db.query(Lesson).filter(Lesson.lesson_id == final_lesson_id).first()
+            if lesson:
+                lesson.mind_map = {"mind_map": mind_map, "keywords": keywords}
+            nodes = db.query(CIRSection).filter(CIRSection.lesson_id == final_lesson_id).all()
             for node in nodes:
-                node.script_content = generate_script_for_node(node, use_llm=enable_script_llm)
-                cnt += 1
+                if node.node_id in script_map:
+                    node.script_content = script_map[node.node_id]
             db.commit()
-            return cnt
         finally:
             db.close()
 
-    script_count = await asyncio.to_thread(_generate_scripts)
-    yield {"type": "status", "step": "script", "generated": script_count, "llm": enable_script_llm}
+    await asyncio.to_thread(_apply_parallel_outputs)
 
     await async_tts_service.start()
     db = SessionLocal()
@@ -278,20 +332,33 @@ async def run_full_pipeline(
         db.close()
     yield {"type": "status", "step": "tts_done"}
 
-    ok, qdrant_log = await _run_qdrant_ingest(raw_json_path, final_lesson_id, school_id)
-    yield {"type": "status", "step": "qdrant", "ok": ok, "log": qdrant_log[-2000:]}
-
     def _finish_lesson() -> None:
         db = SessionLocal()
         try:
             lesson = db.query(Lesson).filter(Lesson.lesson_id == final_lesson_id).first()
             if lesson:
-                lesson.task_status = "completed" if ok else "failed"
+                lesson.task_status = "completed"
                 lesson.completed_at = datetime.now(timezone.utc)
                 db.commit()
         finally:
             db.close()
 
-    await asyncio.to_thread(_finish_lesson)
+    qdrant_task = asyncio.create_task(_run_qdrant_ingest(raw_json_path, final_lesson_id, school_id))
+    finish_task = asyncio.create_task(asyncio.to_thread(_finish_lesson))
+    ok, qdrant_log = await qdrant_task
+    await finish_task
+    if not ok:
+        def _mark_failed() -> None:
+            db = SessionLocal()
+            try:
+                lesson = db.query(Lesson).filter(Lesson.lesson_id == final_lesson_id).first()
+                if lesson:
+                    lesson.task_status = "failed"
+                    db.commit()
+            finally:
+                db.close()
+
+        await asyncio.to_thread(_mark_failed)
+    yield {"type": "status", "step": "qdrant", "ok": ok, "log": qdrant_log[-2000:]}
     elapsed_s = (datetime.now(timezone.utc) - start).total_seconds()
     yield {"type": "done", "step": "end", "lesson_id": final_lesson_id, "elapsed_seconds": round(elapsed_s, 3)}

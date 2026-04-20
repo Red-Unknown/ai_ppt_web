@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Tuple
 
@@ -93,6 +94,7 @@ async def run_cir_pipeline(
     title: str | None = None,
     voice: str = "zh-CN-XiaoxiaoNeural",
 ) -> AsyncGenerator[Dict[str, Any], None]:
+    start = datetime.now(timezone.utc)
     yield {"type": "status", "step": "start", "message": "开始执行CIR异步流水线"}
 
     parsed_json = await asyncio.to_thread(lambda: json.loads(Path(json_path).read_text(encoding="utf-8")))
@@ -107,25 +109,15 @@ async def run_cir_pipeline(
     await asyncio.to_thread(
         lambda: out_path.write_text("\n\n".join(pages) + ("\n" if pages else ""), encoding="utf-8-sig")
     )
-    yield {"type": "status", "step": "extract_content", "pages": len(pages), "output_text_path": str(out_path)}
+    yield {"type": "status", "step": "content_text", "pages": len(pages), "path": str(out_path)}
 
     content_text = "\n\n".join(pages)
     mind_map, keywords = await generate_mindmap_async(content_text)
-    yield {"type": "status", "step": "mindmap", "keywords_count": len(keywords), "message": "思维导图与关键词生成完成"}
-
-    yield {"type": "status", "step": "script", "message": "i讲稿生成暂未实现，已跳过"}
+    yield {"type": "status", "step": "mind_map", "keywords_count": len(keywords), "message": "思维导图与关键词生成完成"}
 
     cir_rows = _build_cir_rows(parsed_json, final_lesson_id, school_id)
-    await async_tts_service.start()
-    for idx, row in enumerate(cir_rows, start=1):
-        if row["node_type"] != "subchapter":
-            continue
-        text = (row.get("teaching_content") or row["node_name"])[:600]
-        task_id, _ = await async_tts_service.synthesize_async(text=text, voice=voice, client_id=final_lesson_id)
-        row["audio_url"] = f"tts_task://{task_id}" if task_id else None
-        yield {"type": "progress", "step": "tts", "current": idx, "total": len(cir_rows)}
 
-    def _save_db() -> Tuple[int, int]:
+    def _save_base_db() -> int:
         db = SessionLocal()
         try:
             lesson = db.query(Lesson).filter(Lesson.lesson_id == final_lesson_id).first()
@@ -137,12 +129,11 @@ async def run_cir_pipeline(
                     title=final_title,
                     file_type="ppt",
                     file_url=json_path,
-                    task_status="completed",
+                    task_status="processing",
                     file_info=parsed_json.get("data", {}).get("fileInfo"),
                 )
                 db.add(lesson)
             lesson.mind_map = {"mind_map": mind_map, "keywords": keywords}
-            lesson.task_status = "completed"
 
             db.query(CIRSection).filter(CIRSection.lesson_id == final_lesson_id).delete()
             insert_count = 0
@@ -160,22 +151,80 @@ async def run_cir_pipeline(
                         page_num=row.get("page_num"),
                         key_points=row.get("key_points"),
                         teaching_content=row.get("teaching_content"),
-                        script_content=row.get("teaching_content"),  # i讲稿未实现，先落教学内容占位
-                        audio_url=row.get("audio_url"),
+                        script_content=None,
+                        audio_url=None,
                     )
                 )
                 insert_count += 1
             db.commit()
-            return insert_count, len(keywords)
+            return insert_count
         finally:
             db.close()
 
-    inserted, kw_count = await asyncio.to_thread(_save_db)
+    inserted = await asyncio.to_thread(_save_base_db)
+    yield {"type": "status", "step": "postgres_cir_base", "inserted_nodes": inserted}
+
+    def _save_script_placeholder() -> int:
+        db = SessionLocal()
+        try:
+            nodes = (
+                db.query(CIRSection)
+                .filter(CIRSection.lesson_id == final_lesson_id, CIRSection.node_type == "subchapter")
+                .order_by(CIRSection.sort_order.asc())
+                .all()
+            )
+            cnt = 0
+            for node in nodes:
+                node.script_content = node.teaching_content or node.node_name
+                cnt += 1
+            db.commit()
+            return cnt
+        finally:
+            db.close()
+
+    script_count = await asyncio.to_thread(_save_script_placeholder)
+    yield {"type": "status", "step": "script", "generated": script_count, "llm": False}
+
+    await async_tts_service.start()
+
+    db = SessionLocal()
+    try:
+        nodes = (
+            db.query(CIRSection)
+            .filter(CIRSection.lesson_id == final_lesson_id, CIRSection.node_type == "subchapter")
+            .order_by(CIRSection.sort_order.asc())
+            .all()
+        )
+        total = len(nodes)
+        for idx, node in enumerate(nodes, start=1):
+            text = (node.script_content or node.teaching_content or node.node_name or "")[:600]
+            task_id, _ = await async_tts_service.synthesize_async(text=text, voice=voice, client_id=final_lesson_id)
+            node.audio_url = f"tts_task://{task_id}" if task_id else None
+            yield {"type": "progress", "step": "tts", "current": idx, "total": total}
+        db.commit()
+    finally:
+        db.close()
+    yield {"type": "status", "step": "tts_done"}
+
+    def _finish_lesson() -> None:
+        db = SessionLocal()
+        try:
+            lesson = db.query(Lesson).filter(Lesson.lesson_id == final_lesson_id).first()
+            if lesson:
+                lesson.task_status = "completed"
+                lesson.completed_at = datetime.now(timezone.utc)
+                db.commit()
+        finally:
+            db.close()
+
+    await asyncio.to_thread(_finish_lesson)
+    elapsed_s = (datetime.now(timezone.utc) - start).total_seconds()
     yield {
         "type": "done",
-        "step": "store_cir",
+        "step": "end",
         "lesson_id": final_lesson_id,
         "inserted_nodes": inserted,
-        "keywords_count": kw_count,
+        "keywords_count": len(keywords),
+        "elapsed_seconds": round(elapsed_s, 3),
         "message": "CIR入库完成",
     }

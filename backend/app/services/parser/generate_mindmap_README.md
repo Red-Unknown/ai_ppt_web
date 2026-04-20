@@ -43,7 +43,7 @@ export DEEPSEEK_API_KEY="your-api-key-here"
 2. **运行脚本**
    ```powershell
    # PowerShell
-   $env:DEEPSEEK_API_KEY="sk-xxx"; .\venv\Scripts\python.exe generate_mindmap.py
+   $env:DEEPSEEK_API_KEY="sk-xxx"; .\venv\Scripts\python.exe backend/app/services/parser/generate_mindmap.py
    ```
 
 3. **查看输出**
@@ -97,10 +97,10 @@ export DEEPSEEK_API_KEY="your-api-key-here"
 
 ```
 ai_ppt_web/
-├── generate_mindmap.py      # 主脚本
-├── generate_mindmap_README.md  # 本说明书
-├── out_put.txt              # 输入：课程讲义
-└── mind_map.json            # 输出：思维导图
+├── backend/app/services/parser/generate_mindmap.py
+├── backend/app/services/parser/generate_mindmap_README.md
+├── sandbox/out_put.txt
+└── sandbox/mind_map.json
 ```
 
 ## 集成建议
