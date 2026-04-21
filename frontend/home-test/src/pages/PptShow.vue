@@ -142,22 +142,17 @@
     <UserInfoPopup
       v-if="showUserInfoPopup"
       :user-info="userStore.userInfo"
+      :visible="showUserInfoPopup"
       @close="showUserInfoPopup = false"
       @menu-click="handleMenuClick"
       @logout="handleLogout"
-    />
-    
-    <!-- 个人资料编辑弹窗 -->
-    <ProfileEditPopup
-      v-if="showProfileEditPopup"
-      :user-info="userStore.userInfo"
-      @close="showProfileEditPopup = false"
-      @save="saveProfile"
+      @save-profile="saveProfile"
     />
     
     <!-- 关于我们弹窗 -->
     <AboutUsPopup
       v-if="showAboutUsPopup"
+      theme="orange"
       @close="showAboutUsPopup = false"
     />
   </div>
@@ -169,7 +164,6 @@ import StartLearningPopup from '@/components/StartLearningPopup.vue'
 import SubjectSidebar from '@/components/SubjectSidebar.vue'
 import ChapterSidebar from '@/components/ChapterSidebar.vue'
 import UserInfoPopup from '@/components/UserInfoPopup.vue'
-import ProfileEditPopup from '@/components/ProfileEditPopup.vue'
 import AboutUsPopup from '@/components/AboutUsPopup.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import { useUserStore } from '@/stores/userStore'
@@ -332,9 +326,6 @@ const userName = computed(() => userStore.userName)
 // 用户信息弹窗状态
 const showUserInfoPopup = ref(false)
 
-// 个人资料编辑弹窗状态
-const showProfileEditPopup = ref(false)
-
 // 关于我们弹窗状态
 const showAboutUsPopup = ref(false)
 
@@ -458,25 +449,22 @@ const handleMenuClick = (menuItem) => {
   console.log('点击菜单:', menuItem)
   // 这里可以根据不同的菜单项执行不同的操作
   switch (menuItem) {
-    case 'profile':
-      // 处理个人资料
-      showProfileEditPopup.value = true
-      break
     case 'settings':
       // 处理设置
+      alert('设置功能暂未开放')
       break
     case 'aiConfig':
       // 处理AI配置
+      alert('AI配置功能暂未开放')
       break
     case 'about':
       // 处理关于我们
+      showUserInfoPopup.value = false
       showAboutUsPopup.value = true
       break
     default:
       break
   }
-  // 关闭弹窗
-  showUserInfoPopup.value = false
 }
 
 // 处理退出登录

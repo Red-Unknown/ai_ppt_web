@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PPT解析API Mock测试工具</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      text-align: center;
+      color: white;
+      margin-bottom: 30px;
+      font-size: 2.5rem;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      gap: 20px;
+    }
+    
+    .panel {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    
+    .panel h2 {
+      color: #333;
+      margin-bottom: 20px;
+      font-size: 1.3rem;
+      border-bottom: 2px solid #667eea;
+      padding-bottom: 10px;
+    }
+    
+    .form-group {
+      margin-bottom: 16px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: #555;
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+    
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 14px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      transition: border-color 0.3s;
+    }
+    
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.85rem;
+    }
+    
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    
+    button {
+      flex: 1;
+      min-width: 100px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+    
+    .btn-secondary:hover {
+      background: #e0e0e0;
+    }
+    
+    .btn-danger {
+      background: #ff4757;
+      color: white;
+    }
+    
+    .btn-danger:hover {
+      background: #ff3838;
+    }
+    
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ccc;
+    }
+    
+    .status-indicator.connected {
+      background: #2ed573;
+      box-shadow: 0 0 10px rgba(46, 213, 115, 0.5);
+    }
+    
+    .status-indicator.connecting {
+      background: #ffa502;
+      animation: pulse 1s infinite;
+    }
+    
+    .status-indicator.error {
+      background: #ff4757;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .logs {
+      max-height: 600px;
+      overflow-y: auto;
+      background: #1e1e1e;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    
+    .log-entry {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+      padding: 8px;
+      border-radius: 4px;
+      line-height: 1.5;
+    }
+    
+    .log-entry.timestamp {
+      color: #6c757d;
+      font-size: 0.75rem;
+    }
+    
+    .log-entry.connection {
+      color: #2ed573;
+      background: rgba(46, 213, 115, 0.1);
+    }
+    
+    .log-entry.status {
+      color: #74b9ff;
+      background: rgba(116, 185, 255, 0.1);
+    }
+    
+    .log-entry.progress {
+      color: #fdcb6e;
+      background: rgba(253, 203, 110, 0.1);
+    }
+    
+    .log-entry.done {
+      color: #55efc4;
+      background: rgba(85, 239, 196, 0.1);
+    }
+    
+    .log-entry.error {
+      color: #ff7675;
+      background: rgba(255, 118, 117, 0.1);
+    }
+    
+    .log-entry.sent {
+      color: #a29bfe;
+      background: rgba(162, 155, 254, 0.1);
+    }
+    
+    .progress-bar {
+      height: 8px;
+      background: #e0e0e0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+      transition: width 0.3s;
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 15px;
+    }
+    
+    .stat-item {
+      background: #f8f9fa;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #667eea;
+    }
+    
+    .stat-label {
+      font-size: 0.8rem;
+      color: #666;
+      margin-top: 4px;
+    }
+    
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .checkbox-group input[type="checkbox"] {
+      width: auto;
+    }
+    
+    .error-scenarios {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+    
+    .error-scenarios label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    
+    @media (max-width: 1024px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 PPT解析API Mock测试工具</h1>
+    
+    <div class="grid">
+      <!-- 左侧面板：配置和请求 -->
+      <div class="panel">
+        <h2>🔧 请求配置</h2>
+        
+        <div class="status-bar">
+          <div class="status-indicator" id="statusIndicator"></div>
+          <span id="statusText">未连接</span>
+        </div>
+        
+        <div class="form-group">
+          <label>WebSocket地址</label>
+          <input type="text" id="wsUrl" value="ws://127.0.0.1:8001/api/v1/ws/script">
+        </div>
+        
+        <div class="form-group">
+          <label>服务类型</label>
+          <select id="service">
+            <option value="full_pipeline">full_pipeline（全流程）</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>文件路径</label>
+          <input type="text" id="filePath" value="sandbox/第九章 压杆稳定.ppt">
+        </div>
+        
+        <div class="form-group">
+          <label>文件类型</label>
+          <select id="fileType">
+            <option value="ppt">ppt</option>
+            <option value="pptx">pptx</option>
+            <option value="pdf">pdf</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>课程ID</label>
+          <input type="text" id="courseId" value="course_mechanics_001">
+        </div>
+        
+        <div class="form-group">
+          <label>学校ID</label>
+          <input type="text" id="schoolId" value="SCH001">
+        </div>
+        
+        <div class="form-group">
+          <label>课件标题</label>
+          <input type="text" id="title" value="第九章 压杆稳定">
+        </div>
+        
+        <div class="form-group">
+          <label>TTS音色</label>
+          <select id="voice">
+            <option value="zh-CN-XiaoxiaoNeural">zh-CN-XiaoxiaoNeural</option>
+            <option value="zh-CN-YunxiNeural">zh-CN-YunxiNeural</option>
+            <option value="zh-CN-YunjianNeural">zh-CN-YunjianNeural</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>模拟页数（默认65）</label>
+          <input type="number" id="pageCount" value="10" min="1" max="100">
+        </div>
+        
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="enableLLM" checked>
+          <label for="enableLLM" style="margin-bottom: 0;">启用LLM讲稿生成</label>
+        </div>
+        
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="fastMode">
+          <label for="fastMode" style="margin-bottom: 0;">快速测试模式（5页）</label>
+        </div>
+        
+        <div class="form-group">
+          <label>错误场景模拟</label>
+          <div class="error-scenarios">
+            <label><input type="radio" name="errorScenario" value="" checked> 正常流程</label>
+            <label><input type="radio" name="errorScenario" value="validation"> 验证错误</label>
+            <label><input type="radio" name="errorScenario" value="parse"> 解析错误</label>
+            <label><input type="radio" name="errorScenario" value="tts"> TTS错误</label>
+            <label><input type="radio" name="errorScenario" value="qdrant"> Qdrant错误</label>
+          </div>
+        </div>
+        
+        <div class="btn-group">
+          <button class="btn-primary" onclick="connect()">连接</button>
+          <button class="btn-secondary" onclick="sendRequest()">发送请求</button>
+          <button class="btn-danger" onclick="disconnect()">断开</button>
+        </div>
+        
+        <div class="stats" id="stats" style="display: none;">
+          <div class="stat-item">
+            <div class="stat-value" id="statPages">0</div>
+            <div class="stat-label">总页数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="statProgress">0%</div>
+            <div class="stat-label">TTS进度</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="statTime">0s</div>
+            <div class="stat-label">耗时</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 右侧面板：日志和响应 -->
+      <div class="panel">
+        <h2>📋 通信日志</h2>
+        <div class="logs" id="logs"></div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+        </div>
+        <div class="btn-group" style="margin-top: 15px;">
+          <button class="btn-secondary" onclick="clearLogs()">清空日志</button>
+          <button class="btn-secondary" onclick="exportLogs()">导出日志</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let startTime = null;
+    let totalPages = 0;
+    let currentProgress = 0;
+    
+    function updateStatus(status, text) {
+      const indicator = document.getElementById('statusIndicator');
+      const statusText = document.getElementById('statusText');
+      
+      indicator.className = 'status-indicator ' + status;
+      statusText.textContent = text;
+    }
+    
+    function addLog(type, message, data = null) {
+      const logs = document.getElementById('logs');
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      
+      const timestamp = new Date().toLocaleTimeString();
+      let content = `[${timestamp}] ${message}`;
+      
+      if (data) {
+        content += '\n' + JSON.stringify(data, null, 2);
+      }
+      
+      entry.textContent = content;
+      logs.appendChild(entry);
+      logs.scrollTop = logs.scrollHeight;
+    }
+    
+    function connect() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        addLog('error', '已经连接');
+        return;
+      }
+      
+      const url = document.getElementById('wsUrl').value;
+      updateStatus('connecting', '连接中...');
+      
+      try {
+        ws = new WebSocket(url);
+        
+        ws.onopen = () => {
+          updateStatus('connected', '已连接');
+          addLog('connection', 'WebSocket连接已建立');
+        };
+        
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            handleMessage(data);
+          } catch (e) {
+            addLog('error', '解析消息失败', e.message);
+          }
+        };
+        
+        ws.onclose = () => {
+          updateStatus('', '已断开');
+          addLog('connection', 'WebSocket连接已关闭');
+          ws = null;
+        };
+        
+        ws.onerror = (error) => {
+          updateStatus('error', '连接错误');
+          addLog('error', 'WebSocket错误', error);
+        };
+      } catch (error) {
+        updateStatus('error', '连接失败');
+        addLog('error', '创建连接失败', error.message);
+      }
+    }
+    
+    function disconnect() {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    }
+    
+    function sendRequest() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        addLog('error', '请先连接WebSocket');
+        return;
+      }
+      
+      const errorScenario = document.querySelector('input[name="errorScenario"]:checked').value;
+      const fastMode = document.getElementById('fastMode').checked;
+      
+      const request = {
+        service: document.getElementById('service').value,
+        file_path: document.getElementById('filePath').value,
+        file_type: document.getElementById('fileType').value,
+        output_raw_json_path: 'sandbox/output.json',
+        output_text_path: 'sandbox/output.txt',
+        lesson_id: 'test_' + Date.now(),
+        course_id: document.getElementById('courseId').value,
+        school_id: document.getElementById('schoolId').value,
+        title: document.getElementById('title').value,
+        voice: document.getElementById('voice').value,
+        enable_script_llm: document.getElementById('enableLLM').checked
+      };
+      
+      if (!fastMode) {
+        request.simulate_pages = parseInt(document.getElementById('pageCount').value);
+      } else {
+        request.mode = 'fast';
+      }
+      
+      if (errorScenario) {
+        request.simulate_error = errorScenario;
+      }
+      
+      startTime = Date.now();
+      totalPages = request.simulate_pages || 5;
+      currentProgress = 0;
+      
+      document.getElementById('stats').style.display = 'grid';
+      document.getElementById('statPages').textContent = totalPages;
+      document.getElementById('statProgress').textContent = '0%';
+      document.getElementById('statTime').textContent = '0s';
+      document.getElementById('progressBar').style.width = '0%';
+      
+      addLog('sent', '发送请求', request);
+      ws.send(JSON.stringify(request));
+    }
+    
+    function handleMessage(data) {
+      const type = data.type;
+      
+      switch (type) {
+        case 'connection':
+          addLog('connection', data.message, data);
+          break;
+          
+        case 'status':
+          addLog('status', `状态更新: ${data.step}`, data);
+          
+          if (data.step === 'start') {
+            document.getElementById('statTime').textContent = '0s';
+          }
+          break;
+          
+        case 'progress':
+          addLog('progress', `进度: ${data.current}/${data.total}`, data);
+          
+          if (data.step === 'tts') {
+            currentProgress = data.current;
+            const percent = Math.round((data.current / data.total) * 100);
+            document.getElementById('statProgress').textContent = percent + '%';
+            document.getElementById('progressBar').style.width = percent + '%';
+          }
+          break;
+          
+        case 'done':
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          document.getElementById('statTime').textContent = elapsed + 's';
+          document.getElementById('progressBar').style.width = '100%';
+          addLog('done', '流程完成', data);
+          break;
+          
+        case 'error':
+          addLog('error', `错误: ${data.error}`, data);
+          break;
+          
+        default:
+          addLog('status', '收到消息', data);
+      }
+      
+      // 更新耗时
+      if (startTime) {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+        document.getElementById('statTime').textContent = elapsed + 's';
+      }
+    }
+    
+    function clearLogs() {
+      document.getElementById('logs').innerHTML = '';
+    }
+    
+    function exportLogs() {
+      const logs = document.getElementById('logs').textContent;
+      const blob = new Blob([logs], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ppt-parser-logs-${Date.now()}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    
+    // 页面加载时自动连接
+    window.onload = () => {
+      // 可选：自动连接
+      // connect();
+    };
+    
+    // 页面关闭时断开连接
+    window.onbeforeunload = () => {
+      disconnect();
+    };
+  </script>
+</body>
+</html>

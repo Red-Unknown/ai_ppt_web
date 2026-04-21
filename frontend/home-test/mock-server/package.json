@@ -1,0 +1,19 @@
+{
+  "name": "ppt-parser-mock-server",
+  "version": "1.0.0",
+  "description": "PPT解析API Mock服务 - 用于前端单独测试",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

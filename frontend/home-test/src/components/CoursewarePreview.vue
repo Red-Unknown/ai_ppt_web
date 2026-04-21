@@ -5,6 +5,11 @@
         <img src="@/assets/images/action/ic_pen.svg" class="select-icon" alt="Select Element">
         {{ isSelectMode ? '取消选择' : '选择元素' }}
       </button>
+      <div v-if="bboxes && bboxes.length > 0" class="bbox-navigation">
+        <span class="bbox-indicator">{{ currentBboxIndex + 1 }} / {{ bboxes.length }}</span>
+        <button class="bbox-nav-btn" @click="prevBbox">上一条</button>
+        <button class="bbox-nav-btn" @click="nextBbox">下一条</button>
+      </div>
     </div>
     <div class="preview-content">
       <div class="courseware-scroll">
@@ -17,7 +22,16 @@
             @click="handleSlideClick(index)"
           >
             <div class="card-content" @click.stop="handleContentClick($event, slide, index)">
-              <img :src="slide.imageUrl" alt="PPT幻灯片" class="slide-image" :class="{ 'selectable': isSelectMode }">
+              <div class="slide-image-wrapper">
+                <img :src="slide.imageUrl" alt="PPT幻灯片" class="slide-image" :class="{ 'selectable': isSelectMode }">
+                <div 
+                  v-if="index === currentBboxSlide && currentBbox"
+                  class="bbox-highlight"
+                  :style="getBboxStyle(currentBbox.bbox)"
+                >
+                  <div class="bbox-label">{{ currentBboxIndex + 1 }}</div>
+                </div>
+              </div>
               <div class="slide-number">{{ index + 1 }}</div>
             </div>
           </div>
@@ -36,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 // Props
 const props = defineProps({
@@ -54,6 +68,10 @@ const props = defineProps({
   selectedSlide: {
     type: Number,
     default: 0
+  },
+  bboxes: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -65,6 +83,60 @@ const isSelectMode = ref(false)
 const showAddToChat = ref(false)
 const addToChatPosition = ref({ top: 0, left: 0 })
 const selectedContent = ref(null)
+const currentBboxIndex = ref(0)
+
+// 计算当前bbox的幻灯片索引
+const currentBboxSlide = computed(() => {
+  if (!props.bboxes || props.bboxes.length === 0) return -1
+  return props.bboxes[currentBboxIndex.value]?.slideIndex || -1
+})
+
+// 计算当前bbox
+const currentBbox = computed(() => {
+  if (!props.bboxes || props.bboxes.length === 0) return null
+  return props.bboxes[currentBboxIndex.value] || null
+})
+
+// 监听bboxes变化，重置索引
+watch(() => props.bboxes, (newBboxes) => {
+  if (newBboxes && newBboxes.length > 0) {
+    currentBboxIndex.value = 0
+    emit('slide-click', newBboxes[0].slideIndex)
+  }
+})
+
+// 获取bbox样式
+const getBboxStyle = (bbox) => {
+  if (!bbox) return {}
+  return {
+    left: `${bbox.x}px`,
+    top: `${bbox.y}px`,
+    width: `${bbox.width}px`,
+    height: `${bbox.height}px`
+  }
+}
+
+// 上一条
+const prevBbox = () => {
+  if (currentBboxIndex.value > 0) {
+    currentBboxIndex.value--
+    const bbox = props.bboxes[currentBboxIndex.value]
+    if (bbox) {
+      emit('slide-click', bbox.slideIndex)
+    }
+  }
+}
+
+// 下一条
+const nextBbox = () => {
+  if (props.bboxes && currentBboxIndex.value < props.bboxes.length - 1) {
+    currentBboxIndex.value++
+    const bbox = props.bboxes[currentBboxIndex.value]
+    if (bbox) {
+      emit('slide-click', bbox.slideIndex)
+    }
+  }
+}
 
 // 方法
 const handleSlideClick = (index) => {
@@ -185,6 +257,45 @@ const handleAddToChat = () => {
   filter: brightness(0) invert(1);
 }
 
+/* Bbox导航样式 */
+.bbox-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bbox-indicator {
+  font-size: 13px;
+  color: #E53935;
+  font-weight: 600;
+  padding: 4px 12px;
+  background: rgba(229, 57, 53, 0.1);
+  border-radius: 12px;
+}
+
+.bbox-nav-btn {
+  padding: 6px 14px;
+  border: none;
+  background: #E53935;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 16px;
+  transition: all 0.2s ease;
+}
+
+.bbox-nav-btn:hover:not(:disabled) {
+  background: #C62828;
+  transform: translateY(-1px);
+}
+
+.bbox-nav-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* 选择模式样式 */
 .courseware-preview.select-mode {
   cursor: crosshair;
@@ -199,6 +310,47 @@ const handleAddToChat = () => {
   opacity: 0.8;
   transform: scale(1.02);
   box-shadow: 0 4px 12px rgba(0, 138, 197, 0.2);
+}
+
+/* Bbox红色矩形框样式 */
+.slide-image-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.bbox-highlight {
+  position: absolute;
+  border: 3px solid #E53935;
+  background: rgba(229, 57, 53, 0.1);
+  border-radius: 4px;
+  animation: bboxPulse 2s infinite;
+  pointer-events: none;
+  z-index: 10;
+}
+
+@keyframes bboxPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(229, 57, 53, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(229, 57, 53, 0);
+  }
+}
+
+.bbox-label {
+  position: absolute;
+  top: -24px;
+  left: -3px;
+  background: #E53935;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* 添加到对话选项样式 */

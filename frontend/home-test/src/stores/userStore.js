@@ -5,7 +5,8 @@ export const useUserStore = defineStore('user', {
     userInfo: {
       name: '学生',
       studentId: '20260001',
-      major: '计算机科学与技术'
+      major: '计算机科学与技术',
+      portrait: '热爱学习，善于思考，对计算机科学有浓厚兴趣'
     }
   }),
   

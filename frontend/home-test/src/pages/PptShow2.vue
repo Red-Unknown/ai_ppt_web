@@ -1,15 +1,14 @@
 <template>
   <div class="screen">
     <!-- 顶部栏 -->
-    <div class="header" :class="{ 'header-shadow': isScrolled }">
-      <button class="back-button" @click="goBack">
-        <img src="@/assets/images/action/ic-arrow_left2.svg" alt="返回" class="back-icon">
-      </button>
-      <div class="user-info">
-        <div class="avatar" @click="showUserInfoPopup = true"></div>
-        <span class="username">你好，{{ userName }}老师</span>
-      </div>
-    </div>
+    <Header 
+      :user-name="userName"
+      user-role="teacher"
+      theme="blue"
+      @back="goBack"
+      @avatar-click="() => showUserInfoPopup = true"
+    />
+
 
     <!-- 主体布局 -->
     <div class="main-layout">
@@ -157,20 +156,29 @@
     <!-- 用户信息弹窗 -->
     <UserInfoPopup
       v-if="showUserInfoPopup"
+      :visible="showUserInfoPopup"
       :user-info="userInfo"
       theme="blue"
       @close="showUserInfoPopup = false"
       @menu-click="handleMenuClick"
       @logout="handleLogout"
+      @save-profile="handleSaveProfile"
+    />
+
+    <!-- 关于我们弹窗 -->
+    <AboutUsPopup
+      v-if="showAboutUsPopup"
+      theme="blue"
+      @close="showAboutUsPopup = false"
     />
     
     <!-- 文件导入弹窗 -->
     <div v-if="showFileImportPopup" class="popup-overlay" @click="showFileImportPopup = false">
       <div class="popup-content" @click.stop>
         <h3 class="popup-title">导入文件</h3>
-        <div class="file-upload-area">
+        <div class="file-upload-area" :class="{ 'has-files': selectedFiles.length > 0 }">
           <input type="file" class="file-input" multiple @change="handleFileChange" accept=".ppt,.pptx,.pdf,.jpg,.jpeg,.png">
-          <div class="upload-hint">
+          <div class="upload-hint" v-if="selectedFiles.length === 0">
             <svg viewBox="0 0 24 24" fill="currentColor">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
@@ -179,10 +187,55 @@
             <p>点击或拖拽文件到此处</p>
             <p class="hint-text">支持 PPT、PDF、图片文件</p>
           </div>
+          <div class="selected-files" v-else>
+            <h4 class="files-title">已选择的文件</h4>
+            <div v-for="(file, index) in selectedFiles" :key="index" class="file-item">
+              <div class="file-info">
+                <span class="file-name">{{ file.name }}</span>
+                <span class="file-size">{{ formatFileSize(file.size) }}</span>
+              </div>
+              <button class="remove-file-btn" @click.stop="removeFile(index)">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
+        
+        <!-- 上传进度 -->
+        <div class="upload-progress" v-if="isUploading && wsStatus === 'disconnected'">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+          </div>
+          <span class="progress-text">{{ uploadProgress }}%</span>
+        </div>
+        
+        <!-- WebSocket解析进度 -->
+        <div class="ws-progress" v-if="isUploading && wsStatus !== 'disconnected'">
+          <div class="ws-status">
+            <span class="status-label">解析状态:</span>
+            <span class="status-value" :class="wsStatus">
+              {{ wsStatus === 'connecting' ? '连接中' : 
+                 wsStatus === 'connected' ? '解析中' : 
+                 wsStatus === 'completed' ? '完成' : '错误' }}
+            </span>
+          </div>
+          <div class="ws-message" v-if="wsMessage">
+            <span class="message-label">当前步骤:</span>
+            <span class="message-value">{{ wsMessage }}</span>
+          </div>
+          <div class="progress-bar" v-if="wsProgress > 0">
+            <div class="progress-fill" :style="{ width: wsProgress + '%' }"></div>
+          </div>
+          <span class="progress-text" v-if="wsProgress > 0">{{ wsProgress }}%</span>
+        </div>
+        
         <div class="popup-actions">
-          <button class="btn-cancel" @click="showFileImportPopup = false">取消</button>
-          <button class="btn-confirm" @click="handleFileUpload">导入</button>
+          <button class="btn-cancel" @click="showFileImportPopup = false" :disabled="isUploading">取消</button>
+          <button class="btn-confirm" @click="handleFileUpload" :disabled="selectedFiles.length === 0 || isUploading">
+            {{ isUploading ? '导入中...' : '导入' }}
+          </button>
         </div>
       </div>
     </div>
@@ -191,9 +244,11 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import Header from '@/components/Header.vue'
 import SubjectSidebar from '@/components/SubjectSidebar.vue'
 import ChapterSidebar from '@/components/ChapterSidebar.vue'
 import UserInfoPopup from '@/components/UserInfoPopup.vue'
+import AboutUsPopup from '@/components/AboutUsPopup.vue'
 
 // 预览模式状态
 const isPreviewMode = ref(false)
@@ -355,11 +410,15 @@ const userName = ref('老师')
 const userInfo = ref({
   name: '老师',
   studentId: '20260001',
-  major: '计算机科学与技术'
+  major: '计算机科学与技术',
+  portrait: '热爱教育事业，致力于培养优秀的学生'
 })
 
 // 用户信息弹窗状态
 const showUserInfoPopup = ref(false)
+
+// 关于我们弹窗状态
+const showAboutUsPopup = ref(false)
 
 // 检查是否为开发环境
 const isDevelopment = () => {
@@ -450,23 +509,22 @@ const handleMenuClick = (menuItem) => {
   console.log('点击菜单:', menuItem)
   // 这里可以根据不同的菜单项执行不同的操作
   switch (menuItem) {
-    case 'profile':
-      // 处理个人资料
-      break
     case 'settings':
       // 处理设置
+      alert('设置功能暂未开放')
       break
     case 'aiConfig':
       // 处理AI配置
+      alert('AI配置功能暂未开放')
       break
     case 'about':
       // 处理关于我们
+      showUserInfoPopup.value = false
+      showAboutUsPopup.value = true
       break
     default:
       break
   }
-  // 关闭弹窗
-  showUserInfoPopup.value = false
 }
 
 // 处理退出登录
@@ -477,6 +535,13 @@ const handleLogout = () => {
   localStorage.removeItem('session_id')
   // 跳转到登录页面
   window.location.href = '/'
+}
+
+// 处理保存个人资料
+const handleSaveProfile = (profileData) => {
+  console.log('保存个人资料:', profileData)
+  // 这里可以添加保存个人资料的逻辑
+  userInfo.value = { ...userInfo.value, ...profileData }
 }
 
 // 进入删除模式
@@ -497,6 +562,8 @@ const confirmDeleteCourse = (course) => {
 
 // 选中的文件
 const selectedFiles = ref([])
+const isUploading = ref(false)
+const uploadProgress = ref(0)
 
 // 处理文件导入
 const handleFileImport = (file) => {
@@ -511,27 +578,240 @@ const handleFileChange = (event) => {
   console.log('选择的文件:', selectedFiles.value)
 }
 
-// 处理文件上传
-const handleFileUpload = () => {
-  if (selectedFiles.value.length > 0) {
-    selectedFiles.value.forEach(file => {
-      console.log('上传文件:', file.name)
-      // 这里可以添加文件上传和处理逻辑
-      // 例如创建新的课程
-      const newCourse = {
-        id: courseList.value.length + 1,
-        title: file.name,
-        teacher: '张老师',
-        date: new Date().toISOString().split('T')[0],
-        cover: '',
-        isCollected: false,
-        key_points: `课程内容来自文件: ${file.name}`
+// WebSocket连接状态
+const wsConnection = ref(null)
+const wsStatus = ref('disconnected')
+const wsProgress = ref(0)
+const wsMessage = ref('')
+
+// 生成唯一的lesson_id
+const generateLessonId = () => {
+  return 'lesson_' + Date.now() + '_' + Math.floor(Math.random() * 10000)
+}
+
+// 建立WebSocket连接并发送首帧请求
+const establishWebSocketConnection = (uploadData, courseId, schoolId) => {
+  return new Promise((resolve, reject) => {
+    try {
+      // 生成唯一的lesson_id
+      const lessonId = generateLessonId()
+      
+      // 从上传数据中获取文件信息
+      const fileUrl = uploadData.fileUrl || uploadData.data?.fileUrl
+      const fileType = uploadData.fileType || uploadData.data?.fileType
+      const fileName = uploadData.fileName || uploadData.data?.fileName || 'unknown.ppt'
+      
+      if (!fileUrl || !fileType) {
+        reject(new Error('上传响应缺少必要的文件信息'))
+        return
       }
-      courseList.value.push(newCourse)
-    })
-    selectedFiles.value = []
-    showFileImportPopup.value = false
+      
+      // 构建WebSocket连接
+      const ws = new WebSocket('ws://127.0.0.1:8001/api/v1/ws/script')
+      wsConnection.value = ws
+      wsStatus.value = 'connecting'
+      
+      // 连接成功处理
+      ws.onopen = () => {
+        console.log('WebSocket连接已建立')
+        wsStatus.value = 'connected'
+        
+        // 构建输出文件路径
+        const baseName = fileName.replace(/\.[^/.]+$/, '')
+        
+        // 发送首帧请求 - 根据接口文档要求
+        const firstFrame = {
+          service: 'full_pipeline',
+          file_path: fileUrl,
+          file_type: fileType,
+          output_raw_json_path: `sandbox/${baseName}_全流程测试.json`,
+          output_text_path: `sandbox/${baseName}_全流程测试.txt`,
+          lesson_id: lessonId,
+          course_id: courseId,
+          school_id: schoolId,
+          title: baseName,
+          voice: 'zh-CN-XiaoxiaoNeural',
+          enable_script_llm: true
+        }
+        
+        console.log('发送首帧请求:', firstFrame)
+        ws.send(JSON.stringify(firstFrame))
+      }
+      
+      // 消息接收处理
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data)
+          console.log('收到WebSocket消息:', message)
+          
+          // 处理不同类型的消息
+          if (message.type === 'status') {
+            wsMessage.value = message.message || `步骤: ${message.step}`
+            console.log('状态消息:', wsMessage.value)
+          } else if (message.type === 'progress' && message.step === 'tts') {
+            // 计算TTS进度百分比
+            if (message.total > 0) {
+              wsProgress.value = Math.round((message.current / message.total) * 100)
+              console.log('TTS进度:', wsProgress.value, '%')
+            }
+          } else if (message.type === 'done') {
+            console.log('解析完成:', message)
+            wsStatus.value = 'completed'
+            resolve({ success: true, lessonId: message.lesson_id })
+          } else if (message.type === 'error') {
+            console.error('WebSocket错误:', message)
+            wsStatus.value = 'error'
+            reject(new Error(message.error || '解析过程中发生错误'))
+          }
+        } catch (error) {
+          console.error('解析WebSocket消息失败:', error)
+        }
+      }
+      
+      // 连接错误处理
+      ws.onerror = (error) => {
+        console.error('WebSocket连接错误:', error)
+        wsStatus.value = 'error'
+        reject(new Error('WebSocket连接失败'))
+      }
+      
+      // 连接关闭处理
+      ws.onclose = (event) => {
+        console.log('WebSocket连接已关闭:', event.code, event.reason)
+        wsStatus.value = 'disconnected'
+        wsConnection.value = null
+      }
+      
+    } catch (error) {
+      console.error('建立WebSocket连接失败:', error)
+      wsStatus.value = 'error'
+      reject(new Error('建立WebSocket连接失败'))
+    }
+  })
+}
+
+// 关闭WebSocket连接
+const closeWebSocketConnection = () => {
+  if (wsConnection.value) {
+    wsConnection.value.close()
+    wsConnection.value = null
+    wsStatus.value = 'disconnected'
+    wsProgress.value = 0
+    wsMessage.value = ''
   }
+}
+
+// 处理文件上传
+const handleFileUpload = async () => {
+  if (selectedFiles.value.length > 0) {
+    isUploading.value = true
+    
+    try {
+      for (const file of selectedFiles.value) {
+        console.log('上传文件:', file.name)
+        
+        // 准备FormData
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('course_id', 'course_mechanics_001')
+        formData.append('school_id', 'SCH001')
+        
+        // 使用XMLHttpRequest监听上传进度
+        const response = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest()
+          
+          xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) {
+              const percentComplete = Math.round((event.loaded / event.total) * 100)
+              uploadProgress.value = percentComplete
+            }
+          })
+          
+          xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const data = JSON.parse(xhr.responseText)
+                resolve({ ok: true, data })
+              } catch (error) {
+                reject(new Error('Invalid response format'))
+              }
+            } else {
+              try {
+                const errorData = JSON.parse(xhr.responseText)
+                reject(new Error(errorData.detail || `上传失败: ${xhr.status}`))
+              } catch (error) {
+                reject(new Error(`上传失败: ${xhr.status}`))
+              }
+            }
+          })
+          
+          xhr.addEventListener('error', () => {
+            reject(new Error('网络错误，请检查连接'))
+          })
+          
+          xhr.addEventListener('abort', () => {
+            reject(new Error('上传被取消'))
+          })
+          
+          xhr.open('POST', 'http://127.0.0.1:8001/api/v1/lesson/upload')
+          xhr.send(formData)
+        })
+        
+        // 上传成功，获取上传响应数据
+        const uploadResult = response.data
+        console.log('上传成功，响应数据:', uploadResult)
+        
+        // 上传成功，建立WebSocket连接进行解析
+        try {
+          console.log('开始WebSocket解析流程')
+          await establishWebSocketConnection(uploadResult, 'course_mechanics_001', 'SCH001')
+          console.log('WebSocket解析流程完成')
+        } catch (wsError) {
+          console.error('WebSocket解析失败:', wsError)
+          // 解析失败不影响课程创建，继续执行
+        } finally {
+          // 关闭WebSocket连接
+          closeWebSocketConnection()
+        }
+        
+        // 上传成功，创建新的课程
+        const newCourse = {
+          id: courseList.value.length + 1,
+          title: file.name,
+          teacher: userInfo.value.name || '老师',
+          date: new Date().toISOString().split('T')[0],
+          cover: '',
+          isCollected: false,
+          key_points: `课程内容来自文件: ${file.name}`
+        }
+        courseList.value.push(newCourse)
+      }
+      
+      selectedFiles.value = []
+      showFileImportPopup.value = false
+      uploadProgress.value = 0
+    } catch (error) {
+      console.error('文件上传失败:', error)
+      alert(`上传失败: ${error.message}`)
+      uploadProgress.value = 0
+    } finally {
+      isUploading.value = false
+      // 确保WebSocket连接已关闭
+      closeWebSocketConnection()
+    }
+  }
+}
+
+// 格式化文件大小
+const formatFileSize = (bytes) => {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+}
+
+// 移除文件
+const removeFile = (index) => {
+  selectedFiles.value.splice(index, 1)
 }
 
 // 处理科目删除
@@ -591,86 +871,7 @@ const handleChapterAdd = (newChapter) => {
   overflow: hidden;
 }
 
-/* 顶部栏 */
-.header {
-  height: 60px;
-  background: #FFFFFF;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  z-index: 100;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  position: sticky;
-  top: 0;
-  transition: all 0.3s ease;
-}
 
-.header-shadow {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.back-button {
-  width: 40px;
-  height: 40px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-  border-radius: 50%;
-}
-
-.back-button:hover {
-  transform: translateX(-2px);
-  background: rgba(0, 138, 197, 0.05);
-}
-
-.back-icon {
-  width: 20px;
-  height: 20px;
-  transition: all 0.2s ease;
-}
-
-.back-button:hover .back-icon {
-  filter: brightness(0) saturate(100%) invert(29%) sepia(62%) saturate(1865%) hue-rotate(176deg) brightness(93%) contrast(101%);
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #008AC5;
-  transition: all 0.2s ease;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: bold;
-  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
-}
-
-.avatar:hover {
-  box-shadow: 0 0 0 4px rgba(0, 138, 197, 0.2);
-  transform: scale(1.05);
-}
-
-.username {
-  font-size: 16px;
-  color: #008AC5;
-  font-weight: 400;
-  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
-  white-space: nowrap;
-}
 
 /* 主体布局 */
 .main-layout {
@@ -1152,28 +1353,7 @@ const handleChapterAdd = (newChapter) => {
 }
 
 @media (max-width: 768px) {
-  .header {
-    padding: 0 16px;
-  }
-  
-  .username {
-    font-size: 14px;
-  }
-  
-  .avatar {
-    width: 36px;
-    height: 36px;
-  }
-  
-  .back-button {
-    width: 36px;
-    height: 36px;
-  }
-  
-  .back-icon {
-    width: 18px;
-    height: 18px;
-  }
+
   
   .main-layout {
     flex-direction: column;
@@ -1233,32 +1413,7 @@ const handleChapterAdd = (newChapter) => {
 }
 
 @media (max-width: 480px) {
-  .header {
-    padding: 0 12px;
-  }
-  
-  .username {
-    font-size: 12px;
-  }
-  
-  .user-info {
-    gap: 8px;
-  }
-  
-  .avatar {
-    width: 32px;
-    height: 32px;
-  }
-  
-  .back-button {
-    width: 32px;
-    height: 32px;
-  }
-  
-  .back-icon {
-    width: 16px;
-    height: 16px;
-  }
+
   
   .course-card {
     min-width: 100%;
@@ -1382,6 +1537,10 @@ const handleChapterAdd = (newChapter) => {
   z-index: 1;
 }
 
+.file-upload-area.has-files .file-input {
+  z-index: -1;
+}
+
 .upload-hint {
   display: flex;
   flex-direction: column;
@@ -1448,6 +1607,205 @@ const handleChapterAdd = (newChapter) => {
   transform: translateY(-1px);
 }
 
+/* 已选择文件样式 */
+.selected-files {
+  width: 100%;
+  text-align: left;
+}
+
+.files-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #276884;
+  margin: 0 0 12px 0;
+  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  transition: all 0.2s ease;
+}
+
+.file-item:hover {
+  background: #e9ecef;
+}
+
+.file-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-name {
+  font-size: 14px;
+  color: #333;
+  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size {
+  font-size: 12px;
+  color: #666;
+  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
+}
+
+.remove-file-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: #dc3545;
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
+}
+
+.remove-file-btn:hover {
+  background: #c82333;
+  transform: scale(1.1);
+  box-shadow: 0 3px 6px rgba(220, 53, 69, 0.3);
+}
+
+.remove-file-btn:active {
+  transform: scale(0.95);
+  box-shadow: 0 1px 2px rgba(220, 53, 69, 0.2);
+}
+
+.remove-file-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: white;
+}
+
+/* 上传进度样式 */
+.upload-progress,
+.ws-progress {
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #008AC5, #006B9A);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #666;
+  text-align: right;
+  font-weight: 500;
+  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
+}
+
+/* WebSocket解析进度样式 */
+.ws-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.status-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #276884;
+  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
+}
+
+.status-value {
+  font-size: 12px;
+  font-weight: 500;
+  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.status-value.connecting {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+}
+
+.status-value.connected {
+  background: rgba(40, 167, 69, 0.2);
+  color: #28a745;
+}
+
+.status-value.completed {
+  background: rgba(0, 123, 255, 0.2);
+  color: #007bff;
+}
+
+.status-value.error {
+  background: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+}
+
+.ws-message {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.message-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #276884;
+  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
+}
+
+.message-value {
+  font-size: 12px;
+  color: #333;
+  font-family: 'PingFang SC', 'Segoe UI', sans-serif;
+  line-height: 1.4;
+}
+
+/* 按钮禁用状态 */
+.btn-cancel:disabled,
+.btn-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-confirm:disabled:hover {
+  background: #008AC5;
+}
+
 /* 响应式弹窗 */
 @media (max-width: 480px) {
   .popup-content {
@@ -1466,6 +1824,24 @@ const handleChapterAdd = (newChapter) => {
   
   .upload-hint p {
     font-size: 12px;
+  }
+  
+  .file-name {
+    font-size: 12px;
+  }
+  
+  .file-size {
+    font-size: 10px;
+  }
+  
+  .remove-file-btn {
+    width: 20px;
+    height: 20px;
+  }
+  
+  .remove-file-btn svg {
+    width: 12px;
+    height: 12px;
   }
 }
 </style>

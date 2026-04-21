@@ -1,6 +1,6 @@
 <template>
   <div class="about-us-popup-overlay" @click="close">
-    <div class="about-us-popup" @click.stop>
+    <div class="about-us-popup" @click.stop :class="themeClass">
       <!-- 弹窗头部 -->
       <div class="popup-header">
         <h3 class="popup-title">关于我们</h3>
@@ -18,6 +18,22 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+
+// 定义props
+const props = defineProps({
+  theme: {
+    type: String,
+    default: 'orange',
+    validator: (value) => ['orange', 'blue'].includes(value)
+  }
+})
+
+// 计算主题类
+const themeClass = computed(() => {
+  return props.theme === 'blue' ? 'theme-blue' : ''
+})
+
 // 定义事件
 const emit = defineEmits(['close'])
 
@@ -123,6 +139,16 @@ const close = () => {
   font-size: 16px;
   color: #666;
   font-family: 'PingFang SC', 'Segoe UI', sans-serif;
+}
+
+/* 蓝色主题样式 */
+.theme-blue .popup-title {
+  color: #008AC5;
+}
+
+.theme-blue .close-button:hover {
+  background: #E6F4FB;
+  color: #008AC5;
 }
 
 /* 响应式设计 */

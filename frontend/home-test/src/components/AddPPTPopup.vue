@@ -31,14 +31,15 @@
         
         <!-- 文件上传区域 -->
         <div class="form-group">
-          <label class="form-label">PPT文件</label>
+          <label class="form-label">课件文件</label>
+          <small class="form-hint">支持PPT、PPTX、PDF文件</small>
           <div class="file-upload-container">
             <input 
               type="file" 
               class="file-input" 
               ref="fileInput"
               @change="handleFileChange"
-              accept=".ppt,.pptx"
+              accept=".ppt,.pptx,.pdf"
             />
             <button type="button" class="file-upload-button" @click="triggerFileInput">
               <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -46,7 +47,7 @@
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
-              {{ selectedFile ? selectedFile.name : '选择PPT文件' }}
+              {{ selectedFile ? selectedFile.name : '选择PPT或PDF文件' }}
             </button>
             <div v-if="selectedFile" class="file-info">
               <span class="file-name">{{ selectedFile.name }}</span>
@@ -106,6 +107,10 @@
       <div v-if="isLoading" class="loading-overlay">
         <div class="loading-spinner"></div>
         <div class="loading-text">{{ loadingText }}</div>
+        <div class="loading-progress">
+          <div class="progress-bar" :style="{ width: `${uploadProgress}%` }"></div>
+        </div>
+        <div class="progress-text">{{ uploadProgress }}%</div>
       </div>
     </div>
   </div>
@@ -153,6 +158,7 @@ const pptTitle = ref('')
 const selectedFile = ref(null)
 const errorMessage = ref('')
 const isLoading = ref(false)
+const uploadProgress = ref(0)
 const showConfirmDialog = ref(false)
 const operationStatus = ref('') // 'success' or 'error'
 const statusMessage = ref('')
@@ -214,16 +220,64 @@ const handleConfirm = () => {
 const confirmCreateItem = async () => {
   showConfirmDialog.value = false
   isLoading.value = true
+  uploadProgress.value = 0
   operationStatus.value = ''
   statusMessage.value = ''
   
   try {
-    // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    // 准备FormData
+    const formData = new FormData()
+    formData.append('file', selectedFile.value)
+    formData.append('course_id', 'course_mechanics_001') // 示例课程ID
+    formData.append('school_id', 'SCH001') // 示例学校ID
     
-    // 模拟API成功响应
-    console.log(`${props.title}:`, pptTitle.value)
-    console.log('Selected file:', selectedFile.value)
+    // 上传文件（使用XMLHttpRequest来监听进度）
+    const response = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = Math.round((event.loaded / event.total) * 100)
+          uploadProgress.value = percentComplete
+        }
+      })
+      
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText)
+            resolve({ ok: true, json: () => Promise.resolve(data) })
+          } catch (error) {
+            reject(new Error('Invalid response format'))
+          }
+        } else {
+          try {
+            const errorData = JSON.parse(xhr.responseText)
+            reject(new Error(errorData.detail || `上传失败: ${xhr.status}`))
+          } catch (error) {
+            reject(new Error(`上传失败: ${xhr.status}`))
+          }
+        }
+      })
+      
+      xhr.addEventListener('error', () => {
+        reject(new Error('网络错误，请检查连接'))
+      })
+      
+      xhr.addEventListener('abort', () => {
+        reject(new Error('上传被取消'))
+      })
+      
+      xhr.open('POST', 'http://127.0.0.1:8001/api/v1/lesson/upload')
+      xhr.send(formData)
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `上传失败: ${response.status}`)
+    }
+    
+    const data = await response.json()
     
     // 显示成功状态
     operationStatus.value = 'success'
@@ -233,12 +287,16 @@ const confirmCreateItem = async () => {
     setTimeout(() => {
       isLoading.value = false
       emit('close')
-      emit('success', { title: pptTitle.value, file: selectedFile.value })
+      emit('success', { 
+        title: pptTitle.value, 
+        file: selectedFile.value,
+        uploadData: data.data
+      })
     }, 1500)
   } catch (error) {
     // 显示错误状态
     operationStatus.value = 'error'
-    statusMessage.value = props.errorMessageDefault
+    statusMessage.value = error.message || props.errorMessageDefault
     console.error(`${props.title}失败:`, error)
     isLoading.value = false
     
@@ -499,6 +557,14 @@ const handleEscape = (event) => {
   margin-top: 0.5rem;
 }
 
+/* 提示信息 */
+.form-hint {
+  font-size: 0.75rem;
+  color: #999;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
 /* 底部操作区 */
 .popup-footer {
   display: flex;
@@ -717,6 +783,30 @@ const handleEscape = (event) => {
 .loading-text {
   font-size: 0.875rem;
   color: #666;
+  margin-bottom: 1rem;
+}
+
+/* 加载进度条 */
+.loading-progress {
+  width: 80%;
+  height: 6px;
+  background: #f3f3f3;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.progress-bar {
+  height: 100%;
+  background: #3285FA;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  color: #666;
+  font-weight: 500;
 }
 
 /* 动画 */

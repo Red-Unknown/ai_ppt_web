@@ -38,14 +38,24 @@
               @option-change="handleOptionChange"
               @bold="handleBold"
             />
+
+            <!-- PPT解析状态栏 -->
+            <div class="ppt-parser-control">
+              <div class="parser-status">
+                <span class="status-label">PPT解析状态:</span>
+                <span class="status-value" :class="{ 'parsing': isParsingPPT, 'connected': pptParser?.isConnected() }">
+                  {{ parseStatusText }}
+                </span>
+                <span v-if="isParsingPPT" class="progress-value">{{ parseProgress }}%</span>
+              </div>
+            </div>
             
             <!-- 教案内容 -->
             <div class="panel-content">
               <LoadingState 
                 v-if="isLoading" 
                 type="loading" 
-                text="辛苦稍作等待～我正在梳理内容
-正在解析PPT..."
+                :text="parseStatusText + ' ' + parseProgress + '%'"
               />
               <LessonPlanContent 
                 v-else 
@@ -108,6 +118,7 @@
                     <CoursewarePreview 
                       :slides="slides"
                       :selected-slide="currentSlide"
+                      :bboxes="currentBboxes"
                       @slide-click="handleSlideClick"
                       @select-element="handleSelectElement"
                       @add-to-chat="handleAddToChat"
@@ -612,6 +623,8 @@ import Loading from '../components/Loading.vue'
 import AIAssistantPanel from '../components/AIAssistantPanel.vue'
 import UserInfoPopup from '../components/UserInfoPopup.vue'
 import { startChatSession, createChatSSE, sendChatMessage } from '../services/apiService.js'
+import { mockBboxService } from '../services/bboxService.js'
+import { PPTParserService } from '../services/pptParserService.js'
 
 // 用户信息
 const userInfo = ref({
@@ -659,11 +672,20 @@ const showHistoryDetail = ref(false)
 // SSE连接
 const sseConnection = ref(null)
 
+// PPT解析服务
+const pptParser = ref(null)
+const isParsingPPT = ref(false)
+const parseProgress = ref(0)
+const parseStatus = ref('')
+const parseStatusText = ref('等待解析...')
+
 // 教案区状态切换按钮
 const lessonPanelState = ref(localStorage.getItem('lessonPanelState') === 'true')
 // 导航栏状态
 const isScrolled = ref(false)
 const showUserInfoPopup = ref(false)
+// Bbox状态
+const currentBboxes = ref([])
 // 编辑模式状态
 const isEditMode = ref(true)
 
@@ -1312,22 +1334,41 @@ const simulateAIResponse = async () => {
       sseConnection.value.close()
     }
     
+    let fullAnswer = ''
+    
     sseConnection.value = createChatSSE((data) => {
       if (data.answer) {
+        fullAnswer += data.answer
         aiMessages.value.push({
           type: 'ai',
           content: data.answer
         })
       }
+      
+      // 模拟获取bboxes（根据AI回答内容获取相关的bbox）
+      if (fullAnswer && data.type === 'end') {
+        const bboxes = mockBboxService.getBboxesForAnswer(fullAnswer)
+        if (bboxes && bboxes.length > 0) {
+          currentBboxes.value = bboxes
+        }
+      }
     })
   } catch (error) {
     console.error('获取AI回复失败:', error)
     // 失败时使用模拟回复
+    const mockAnswer = '选中目标图层：在左侧 Layers 面板里，选中你要处理的图标（比如图中的 Volume 2 或 mic 图层）。\n扁平化 / 轮廓化：\n• 如果是文字 / 形状组合：先右键 → Flatten（扁平化），把组合变成单一形状。\n• 如果是描边线条：选中线条 → 右侧面板 Stroke → 点击 Outline stroke（轮廓化描边），把线条变成可编辑的填充形状。\n布尔运算合并：\n• 选中所有组成图标的形状图层 → 顶部工具栏选择 Union selection（合并），把多个形状合并成一个矢量路径。\n• 如果有镂空部分，用 Subtract selection（减去）来实现。'
+    
     setTimeout(() => {
       aiMessages.value.push({
         type: 'ai',
-        content: '选中目标图层：在左侧 Layers 面板里，选中你要处理的图标（比如图中的 Volume 2 或 mic 图层）。\n扁平化 / 轮廓化：\n• 如果是文字 / 形状组合：先右键 → Flatten（扁平化），把组合变成单一形状。\n• 如果是描边线条：选中线条 → 右侧面板 Stroke → 点击 Outline stroke（轮廓化描边），把线条变成可编辑的填充形状。\n布尔运算合并：\n• 选中所有组成图标的形状图层 → 顶部工具栏选择 Union selection（合并），把多个形状合并成一个矢量路径。\n• 如果有镂空部分，用 Subtract selection（减去）来实现。'
+        content: mockAnswer
       })
+      
+      // 模拟获取bboxes
+      const bboxes = mockBboxService.getBboxesForAnswer(mockAnswer)
+      if (bboxes && bboxes.length > 0) {
+        currentBboxes.value = bboxes
+      }
     }, 1000)
   } finally {
     isGlobalLoading.value = false
@@ -1620,6 +1661,9 @@ onMounted(() => {
   calculateProgress()
   initVoiceRecognition()
   
+  // 初始化PPT解析服务
+  initPPTParser()
+  
   const handleScroll = () => {
     isScrolled.value = window.scrollY > 10
   }
@@ -1707,10 +1751,148 @@ const handleFullscreenChange = () => {
   }
 }
 
+// 初始化PPT解析服务
+const initPPTParser = async () => {
+  pptParser.value = new PPTParserService()
+  
+  // 监听状态事件
+  pptParser.value.on('status', (data) => {
+    parseStatus.value = data.step
+    parseStatusText.value = getStatusText(data.step)
+    console.log('[PPTParser] 状态:', data.step)
+    
+    // 更新总页数
+    if (data.total_pages) {
+      totalSlides.value = data.total_pages
+      totalPages.value = data.total_pages
+    }
+  })
+  
+  // 监听进度事件
+  pptParser.value.on('progress', (data) => {
+    if (data.step === 'tts') {
+      parseProgress.value = Math.round((data.current / data.total) * 100)
+      currentSlide.value = data.current - 1
+      currentPage.value = data.current
+      progressPercentage.value = parseProgress.value
+      progressPercent.value = parseProgress.value
+      console.log('[PPTParser] 进度:', data.current + '/' + data.total)
+    }
+  })
+  
+  // 监听完成事件
+  pptParser.value.on('done', (data) => {
+    isParsingPPT.value = false
+    isLoading.value = false
+    parseStatusText.value = '解析完成'
+    console.log('[PPTParser] 完成，耗时:', data.elapsed_seconds + '秒')
+    
+    // 处理解析结果
+    if (data.output) {
+      handleParseResult(data.output)
+    }
+  })
+  
+  // 监听错误事件
+  pptParser.value.on('error', (data) => {
+    isParsingPPT.value = false
+    isLoading.value = false
+    parseStatusText.value = '解析失败'
+    console.error('[PPTParser] 错误:', data.error)
+    alert('PPT解析失败: ' + data.error)
+  })
+  
+  // 监听连接事件
+  pptParser.value.on('connection', (data) => {
+    console.log('[PPTParser] 连接ID:', data.connection_id)
+  })
+  
+  // 建立连接
+  try {
+    await pptParser.value.connect()
+    console.log('[PPTParser] 连接成功')
+  } catch (error) {
+    console.error('[PPTParser] 连接失败:', error)
+  }
+}
+
+// 获取状态文本
+const getStatusText = (step) => {
+  const statusMap = {
+    'start': '开始解析...',
+    'extract': '提取PPT内容...',
+    'convert': '转换格式...',
+    'script': '生成教案...',
+    'tts': '生成语音...',
+    'vector': '构建向量索引...',
+    'done': '解析完成'
+  }
+  return statusMap[step] || '处理中...'
+}
+
+// 发送PPT解析请求
+const startPPTParse = (filePath, fileType = 'ppt', courseId = 'course_mechanics_001') => {
+  if (!pptParser.value || !pptParser.value.isConnected()) {
+    console.error('[PPTParser] 服务未连接')
+    alert('PPT解析服务未连接，请稍后重试')
+    return
+  }
+  
+  isParsingPPT.value = true
+  isLoading.value = true
+  parseProgress.value = 0
+  parseStatusText.value = '开始解析...'
+  
+  pptParser.value.parsePPT({
+    service: 'full_pipeline',
+    file_path: filePath,
+    file_type: fileType,
+    course_id: courseId
+  })
+}
+
+// 处理解析结果
+const handleParseResult = (output) => {
+  // 更新教案内容
+  if (output.lesson_plan) {
+    lessonContent.value = {
+      objectives: output.lesson_plan.objectives || [],
+      keyPoints: output.lesson_plan.key_points || [],
+      teachingSteps: output.lesson_plan.teaching_steps || [],
+      exercises: output.lesson_plan.exercises || []
+    }
+  }
+  
+  // 更新幻灯片数据
+  if (output.slides && Array.isArray(output.slides)) {
+    slides.value = output.slides.map((slide, index) => ({
+      imageUrl: slide.image_url || slide.imageUrl || '',
+      pageNumber: slide.page_number || index + 1,
+      elements: slide.elements || []
+    }))
+  }
+  
+  // 更新思维导图
+  if (output.mindmap) {
+    mindMapContent.value = output.mindmap
+  }
+  
+  // 更新课程概要
+  if (output.summary) {
+    courseSummaryContent.value = output.summary
+  }
+}
+
 // 清理
 onUnmounted(() => {
   document.removeEventListener('mousemove', resize)
   document.removeEventListener('mouseup', stopResize)
+  
+  // 断开PPT解析服务
+  if (pptParser.value) {
+    pptParser.value.disconnect()
+    console.log('[PPTParser] 连接已断开')
+  }
 })
 </script>
 
@@ -1898,6 +2080,103 @@ onUnmounted(() => {
 
 .main-content.preview-mode .content-area > .resizer {
   margin: 0;
+}
+
+/* PPT解析控制栏 */
+.ppt-parser-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
+  border-bottom: 1px solid rgba(0, 138, 197, 0.15);
+  gap: 16px;
+}
+
+.parser-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.status-label {
+  color: #666;
+  font-weight: 500;
+}
+
+.status-value {
+  color: #008AC5;
+  font-weight: 600;
+  padding: 4px 12px;
+  background: rgba(0, 138, 197, 0.1);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.status-value.parsing {
+  color: #ff6b35;
+  background: rgba(255, 107, 53, 0.1);
+  animation: pulse-status 1.5s ease-in-out infinite;
+}
+
+.status-value.connected {
+  color: #52c41a;
+  background: rgba(82, 196, 26, 0.1);
+}
+
+.progress-value {
+  color: #ff6b35;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+@keyframes pulse-status {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.parser-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.parser-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: linear-gradient(135deg, #008AC5, #006699);
+  color: white;
+}
+
+.parser-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 138, 197, 0.3);
+}
+
+.parser-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.parser-btn.secondary {
+  background: white;
+  color: #008AC5;
+  border: 1px solid #008AC5;
+}
+
+.parser-btn.secondary:hover:not(:disabled) {
+  background: rgba(0, 138, 197, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 138, 197, 0.15);
 }
 
 /* 面板通用样式 */
