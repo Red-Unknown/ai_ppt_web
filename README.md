@@ -182,3 +182,38 @@ npm run dev
 
 完整规则与更多约定（环境、数据、代码风格等）请参见 `TEAM_GUIDELINES.md`。
 
+## ASR模型配置
+本项目使用 [Vosk](https://alphacephei.com/vosk/) 离线语音识别引擎，支持中文实时语音转文字。
+
+### 模型下载
+1. 访问 Vosk 模型列表：[https://alphacephei.com/vosk/models](https://alphacephei.com/vosk/models)
+2. 下载中文小模型 **`vosk-model-small-cn-0.22`**（约 1.8GB）。
+3. 将下载的压缩包解压到项目根目录下的 `models` 文件夹中，确保模型路径为：
+   models/vosk-model-small-cn-0.22/
+├── am/
+├── conf/
+├── graph/
+├── ivector/
+└── README
+
+### 依赖安装
+- 安装 Python 依赖：
+```bash
+pip install vosk pydub
+
+- 安装 ffmpeg（用于音频格式转换）：
+
+Windows：下载并解压后将 ffmpeg.exe 所在目录添加到系统环境变量 PATH 中，或直接将 ffmpeg.exe 放在项目目录下。
+
+Linux/macOS：使用包管理器安装，如 sudo apt install ffmpeg。
+
+
+- 代码配置
+MODEL_PATH = "models/vosk-model-small-cn-0.22"
+model = Model(MODEL_PATH)
+如需更换其他模型（如标准版或英文模型），只需修改此路径并重启服务。
+
+- 注意事项
+1、首次加载模型可能需要几十秒，请耐心等待。
+2、若出现音频转换错误，请检查 ffmpeg 是否正确安装。
+3、小模型对背景噪音敏感，建议在安静环境下录音。
