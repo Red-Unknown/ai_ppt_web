@@ -93,6 +93,9 @@ def setup_logging():
         logging_logger.handlers = [InterceptHandler()]
         logging_logger.propagate = False
 
+    # 关闭 httpx 的 HTTP 请求日志（减少终端输出）
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
     logger.info(f"Logging system initialized with Loguru. Log directory: {log_dir}")
 
 def get_logger(name: str):

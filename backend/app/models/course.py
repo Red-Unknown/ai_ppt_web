@@ -1,12 +1,11 @@
 """
-课程相关模型
-对应建表语句中的 course_categories, courses, lessons 表
+课程模型 (Legacy)
+对应 lessons, courses 表
 """
 
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, JSON
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.sql import func
+from sqlalchemy import Column, String, DateTime, Integer, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
+import json
 
 try:
     from backend.app.core.database import Base
@@ -17,60 +16,63 @@ except ImportError:
 class CourseCategory(Base):
     """课程分类表"""
     __tablename__ = "course_categories"
+    __table_args__ = {'extend_existing': True}
 
-    category_id = Column(Integer, primary_key=True, autoincrement=True, comment="分类ID")
-    school_id = Column(String(50), nullable=False, comment="学校ID，隔离")
-    category_name = Column(String(100), nullable=False, comment="分类名称")
-    sort_order = Column(Integer, default=0, comment="排序")
-
-    # 关系
-    courses = relationship("Course", back_populates="category")
-
-    def __repr__(self):
-        return f"<CourseCategory(id={self.category_id}, name={self.category_name})>"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    parent_id = Column(Integer, ForeignKey("course_categories.id"), nullable=True)
+    created_at = Column(DateTime, server_default="now()")
 
 
 class Course(Base):
-    """课程体系表"""
+    """课程表 - 对应 courses 表"""
     __tablename__ = "courses"
+    __table_args__ = {'extend_existing': True}
 
-    course_id = Column(String(50), primary_key=True, comment="课程ID")
-    school_id = Column(String(50), nullable=False, comment="学校ID，隔离")
-    category_id = Column(Integer, ForeignKey("course_categories.category_id"), comment="分类ID")
-    course_name = Column(String(200), nullable=False, comment="课程名称")
-    teacher_id = Column(String(50), ForeignKey("users.user_id"), comment="教师ID")
-    term = Column(String(20), comment="学期")
-    ext_info = Column(JSON, comment="扩展信息")
+    course_id = Column(String(100), primary_key=True)
+    school_id = Column(String(50), nullable=False)
+    category_id = Column(Integer, ForeignKey("course_categories.id"))
+    course_name = Column(String(500), nullable=False)
+    teacher_id = Column(String(100))
+    term = Column(String(50))
+    ext_info = Column(Text)
 
-    # 关系
-    category = relationship("CourseCategory", back_populates="courses")
-    lessons = relationship("Lesson", back_populates="course")
-
-    def __repr__(self):
-        return f"<Course(id={self.course_id}, name={self.course_name})>"
+    lessons = relationship("Lesson", back_populates="course", cascade="all, delete-orphan")
 
 
 class Lesson(Base):
-    """课件任务表"""
+    """课时表 - 对应 lessons 表"""
     __tablename__ = "lessons"
+    __table_args__ = {'extend_existing': True}
 
-    lesson_id = Column(String(50), primary_key=True, comment="课件ID，对应parseId")
-    course_id = Column(String(50), ForeignKey("courses.course_id"), comment="课程ID")
-    school_id = Column(String(50), nullable=False, comment="学校ID，隔离")
-    title = Column(String(200), nullable=False, comment="标题")
-    cover_image = Column(String(500), comment="封面图片")
-    file_type = Column(String(10), comment="文件类型")
-    file_url = Column(String(500), nullable=False, comment="文件URL")
-    category = Column(String(20), comment="分类")
-    task_status = Column(String(20), nullable=False, server_default="processing", comment="任务状态：processing/completed/failed")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    completed_at = Column(DateTime(timezone=True), comment="完成时间")
-    file_info = Column(JSONB, comment="文件信息（大小、页数等）")
-    mind_map = Column(JSONB, comment="课件全局思维导图（树状结构）")
+    lesson_id = Column(String(100), primary_key=True)
+    course_id = Column(String(100), ForeignKey("courses.course_id"), nullable=False)
+    school_id = Column(String(50), nullable=False)
+    title = Column(String(500), nullable=False)
+    cover_image = Column(String(500))
+    file_type = Column(String(50))
+    file_url = Column(String(1000))
+    category = Column(String(100))
+    task_status = Column(String(50), default="pending")
+    created_at = Column(DateTime, server_default="now()")
+    completed_at = Column(DateTime)
+    file_info = Column(JSON)
+    mind_map = Column(JSON)
 
-    # 关系
+    cir_sections = relationship("CIRSection", back_populates="lesson", cascade="all, delete-orphan")
     course = relationship("Course", back_populates="lessons")
-    cir_sections = relationship("CIRSection", back_populates="lesson")
 
-    def __repr__(self):
-        return f"<Lesson(id={self.lesson_id}, title={self.title})>"
+    @property
+    def mind_map_data(self):
+        if self.mind_map:
+            if isinstance(self.mind_map, dict):
+                return self.mind_map
+            try:
+                return json.loads(self.mind_map)
+            except:
+                pass
+        return None
+
+    @mind_map_data.setter
+    def mind_map_data(self, value):
+        self.mind_map = value if isinstance(value, dict) else (json.dumps(value, ensure_ascii=False) if value else None)

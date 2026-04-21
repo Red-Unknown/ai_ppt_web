@@ -4,25 +4,15 @@ import subprocess
 import time
 import socket
 import argparse
-import shutil
-import re
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Configuration
 ROOT_DIR = Path(__file__).resolve().parents[1]
 BACKEND_DIR = ROOT_DIR / "backend"
-FRONTEND_DIR = ROOT_DIR / "frontend"
 BACKEND_PORT = 8001
-FRONTEND_PORT = 5173
 
-# Load persistent environment from project .env
-load_dotenv(ROOT_DIR / ".env")
-
-# Use ai_ppt_web conda environment Python
 CONDA_ENV_NAME = "ai_ppt_web"
+
 def get_conda_python():
-    """Get Python executable path from ai_ppt_web conda environment."""
     conda_prefix = os.environ.get("CONDA_PREFIX")
     if conda_prefix and CONDA_ENV_NAME in conda_prefix:
         return sys.executable
@@ -34,27 +24,21 @@ def get_conda_python():
 
 PYTHON_EXE = get_conda_python()
 
-# Global Silent Flag
 SILENT = False
 
 def log(msg):
-    """Print message only if not in silent mode."""
     if not SILENT:
         print(msg)
 
 def check_port(port):
-    """Check if a port is in use."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('localhost', port)) == 0
 
 def kill_port(port):
-    """Attempt to kill process on port (Windows/Linux)."""
     log(f"Port {port} is in use. Attempting to free it...")
     try:
         if sys.platform == "win32":
-            # Find PID
             cmd = f"netstat -ano | findstr :{port}"
-            # Capture output regardless of silent mode to find PID
             result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if result.stdout:
                 lines = result.stdout.strip().split('\n')
@@ -67,8 +51,7 @@ def kill_port(port):
                             subprocess.run(f"taskkill /F /PID {pid}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
             subprocess.run(f"lsof -ti:{port} | xargs kill -9", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-        # Verify
+        
         time.sleep(1)
         if check_port(port):
             log(f"Warning: Failed to free port {port}. Please manually stop the process.")
@@ -79,20 +62,12 @@ def kill_port(port):
         log(f"Error checking/killing port {port}: {e}")
 
 def check_dependencies():
-    """Check if python, npm are available and dependencies are installed."""
     log("Checking system dependencies...")
     
-    # Check Python
     log(f"Using Python: {PYTHON_EXE}")
     if not os.path.exists(PYTHON_EXE):
         if not SILENT:
             print(f"Error: Python executable not found: {PYTHON_EXE}")
-        sys.exit(1)
-        
-    # Check NPM
-    if not shutil.which("npm"):
-        if not SILENT:
-            print("Error: NPM not found in PATH. Please install Node.js.")
         sys.exit(1)
 
     log("Checking backend dependencies...")
@@ -106,109 +81,21 @@ def check_dependencies():
     except subprocess.CalledProcessError:
         if not SILENT:
             print("Error: Backend dependencies missing (fastapi, uvicorn, or redis).")
-            print("Run 'scripts/bootstrap.bat' or 'conda env update -f environment.yml'")
         sys.exit(1)
-
-    log("Checking frontend dependencies...")
-    # Check Frontend Deps
-    node_modules = FRONTEND_DIR / "node_modules"
-    package_json = FRONTEND_DIR / "package.json"
     
-    should_install = False
-    if not node_modules.exists():
-        should_install = True
-        log("Frontend dependencies (node_modules) missing.")
-    elif package_json.exists() and package_json.stat().st_mtime > node_modules.stat().st_mtime:
-        should_install = True
-        log("Frontend dependencies out of date.")
+    log("Backend dependencies OK.")
 
-    if should_install:
-        log("Installing frontend dependencies...")
-        try:
-            subprocess.run(
-                ["npm", "install"], 
-                cwd=FRONTEND_DIR, 
-                shell=True, 
-                check=True,
-                stdout=subprocess.DEVNULL if SILENT else None,
-                stderr=subprocess.DEVNULL if SILENT else None
-            )
-            log("Frontend dependencies installed.")
-        except subprocess.CalledProcessError:
-            if not SILENT:
-                print("Error: Failed to install frontend dependencies.")
-            sys.exit(1)
-    else:
-        log("Frontend dependencies up to date.")
-
-def check_api_key():
-    """Check if DEEPSEEK_API_KEY is set in environment variables."""
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
-    
-    if api_key:
-        log("API Key found in environment.")
-        return True
-    
-    log("DEEPSEEK_API_KEY not found in environment variables.")
-    
-    # In silent mode, we cannot ask for input
-    if SILENT:
-        # Try to continue? Or fail?
-        # If silent, assume environment is set up. If not, fail.
-        pass
-    else:
-        try:
-            user_input = input("Please enter your DeepSeek API Key (or press Enter to exit): ").strip()
-            if user_input:
-                os.environ["DEEPSEEK_API_KEY"] = user_input
-                log("API Key set for this session.")
-                return True
-        except (EOFError, KeyboardInterrupt):
-            pass
-
-    error_msg = (
-        "\nERROR: DEEPSEEK_API_KEY is missing!\n"
-        "Please set it using one of the following methods:\n"
-        "  Windows (temporary): set DEEPSEEK_API_KEY=your-api-key\n"
-        "  Windows (permanent): setx DEEPSEEK_API_KEY your-api-key\n"
-        "  Linux/MacOS: export DEEPSEEK_API_KEY=your-api-key\n"
-        "\nAfter setting, restart your terminal or run: conda activate ai_ppt_web"
-    )
-    if not SILENT:
-        print(error_msg)
-    sys.exit(1)
-
-def start_backend(mode="dev"):
-    log(f"Starting Backend (Mode: {mode})...")
+def start_backend():
+    log(f"Starting Backend on port {BACKEND_PORT}...")
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT_DIR)
     env["PYTHONWARNINGS"] = "ignore"
     
     cmd = [
-        PYTHON_EXE, "-m", "uvicorn", 
-        "backend.main:app", 
-        "--host", "0.0.0.0", 
-        "--port", str(BACKEND_PORT)
+        PYTHON_EXE,
+        "-c",
+        f"import uvicorn; uvicorn.run('backend.main:app', host='0.0.0.0', port={BACKEND_PORT})"
     ]
-    
-    if mode == "dev":
-        cmd.append("--reload")
-    
-    # In silent mode, suppress uvicorn logs
-    if SILENT:
-        cmd.extend(["--log-level", "critical"])
-        stdout_dest = subprocess.DEVNULL
-        stderr_dest = subprocess.DEVNULL
-    else:
-        stdout_dest = None # Inherit
-        stderr_dest = None
-    
-    # Return process handle
-    return subprocess.Popen(cmd, cwd=ROOT_DIR, env=env, stdout=stdout_dest, stderr=stderr_dest)
-
-def start_frontend():
-    log("Starting Frontend...")
-    cmd = ["npm", "run", "dev"]
     
     if SILENT:
         stdout_dest = subprocess.DEVNULL
@@ -216,84 +103,93 @@ def start_frontend():
     else:
         stdout_dest = None
         stderr_dest = None
-        
-    # Shell=True needed for npm on Windows
-    return subprocess.Popen(cmd, cwd=FRONTEND_DIR, shell=True, stdout=stdout_dest, stderr=stderr_dest)
+    
+    return subprocess.Popen(cmd, cwd=ROOT_DIR, env=env, stdout=stdout_dest, stderr=stderr_dest)
+
+def wait_for_port_available(port, timeout=60):
+    log(f"Waiting for port {port} to become available...")
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        if not check_port(port):
+            time.sleep(2)
+            if not check_port(port):
+                log(f"Port {port} is now available.")
+                return True
+        time.sleep(2)
+    log(f"Timeout waiting for port {port} to become available.")
+    return False
+
+def ensure_port_free(port):
+    if check_port(port):
+        log(f"Port {port} is occupied. Terminating existing process...")
+        kill_port(port)
+        wait_for_port_available(port)
+
+def monitor_and_restart():
+    global SILENT
+    
+    check_dependencies()
+    
+    ensure_port_free(BACKEND_PORT)
+    
+    log(f"Starting Backend service on port {BACKEND_PORT}...")
+    
+    backend_proc = None
+    restart_count = 0
+    max_restarts = 10
+    
+    try:
+        while True:
+            if backend_proc is None or backend_proc.poll() is not None:
+                if backend_proc and backend_proc.poll() is not None:
+                    exit_code = backend_proc.poll()
+                    log(f"Backend process exited with code {exit_code}")
+                    if exit_code != 0:
+                        ensure_port_free(BACKEND_PORT)
+                
+                if restart_count >= max_restarts:
+                    log(f"Max restart count ({max_restarts}) reached. Exiting.")
+                    break
+                
+                restart_count += 1
+                log(f"Starting backend (attempt {restart_count})...")
+                backend_proc = start_backend()
+                
+                time.sleep(3)
+                if backend_proc.poll() is not None:
+                    log("Backend failed to start. Waiting before retry...")
+                    time.sleep(5)
+                    continue
+                
+                log(f"Backend started successfully on port {BACKEND_PORT}")
+            
+            time.sleep(2)
+            
+    except KeyboardInterrupt:
+        log("\nStopping services...")
+    finally:
+        if backend_proc and backend_proc.poll() is None:
+            backend_proc.terminate()
+            backend_proc.wait()
+        log("Service stopped.")
 
 def main():
     global SILENT
-    parser = argparse.ArgumentParser(description="Start FWWB A12 System")
-    parser.add_argument("--mode", choices=["dev", "prod"], default="dev", help="Run mode")
-    parser.add_argument("--api-key", help="DeepSeek API Key (overrides environment variable)")
+    parser = argparse.ArgumentParser(description="Start Backend Service")
     parser.add_argument("--silent", action="store_true", help="Run in silent mode (no console output)")
     args = parser.parse_args()
 
     if args.silent:
         SILENT = True
 
-    # 1. Pre-flight Checks
-    check_dependencies()
-    
-    # Set API key from command line if provided
-    if args.api_key:
-        os.environ["DEEPSEEK_API_KEY"] = args.api_key
-        log(f"API Key set from command line argument")
-    
-    check_api_key()
-    
-    # 2. Port Management
-    if check_port(BACKEND_PORT):
-        kill_port(BACKEND_PORT)
-    
-    if check_port(FRONTEND_PORT):
-        kill_port(FRONTEND_PORT)
-
-    # 3. Start Services
-    backend_proc = start_backend(args.mode)
-    
-    # Wait a bit for backend to initialize
-    log("Waiting for backend to start...")
-    time.sleep(3)
-    if backend_proc.poll() is not None:
-        log("Backend failed to start.")
-        sys.exit(1)
-        
-    frontend_proc = start_frontend()
-
     if not SILENT:
         print("\n" + "="*40)
-        print(f"System Running in {args.mode.upper()} mode")
+        print(f"Backend Service Running")
         print(f"Backend API: http://localhost:{BACKEND_PORT}")
-        print(f"Frontend UI: http://localhost:{FRONTEND_PORT}")
-        print(f"Debug Page : http://localhost:{FRONTEND_PORT}/debug")
         print("Press Ctrl+C to stop.")
         print("="*40 + "\n")
 
-    try:
-        while True:
-            time.sleep(1)
-            if backend_proc.poll() is not None:
-                log("Backend process exited unexpectedly.")
-                break
-            if frontend_proc.poll() is not None:
-                log("Frontend process exited unexpectedly.")
-                break
-    except KeyboardInterrupt:
-        log("\nStopping services...")
-    finally:
-        # Cleanup
-        if backend_proc.poll() is None:
-            backend_proc.terminate()
-            
-        log("Cleaning up frontend processes...")
-        if sys.platform == "win32":
-            subprocess.run("taskkill /F /IM node.exe", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        else:
-            if frontend_proc.poll() is None:
-                frontend_proc.terminate()
-        
-        backend_proc.wait()
-        log("Services stopped.")
+    monitor_and_restart()
 
 if __name__ == "__main__":
     main()

@@ -58,7 +58,7 @@ class LessonParserService:
             or os.getenv("QWEN_VISION_MODEL")
             or "qwen-vl-plus"
         )
-        self.image_parse_concurrency = int(os.getenv("IMAGE_PARSE_CONCURRENCY", "8"))
+        self.image_parse_concurrency = int(os.getenv("IMAGE_PARSE_CONCURRENCY", "50"))
         self.image_pool_max_connections = int(os.getenv("IMAGE_POOL_MAX_CONNECTIONS", "100"))
         self.image_pool_min_idle = int(os.getenv("IMAGE_POOL_MIN_IDLE", "10"))
         self.progress_enabled = os.getenv("PARSER_PROGRESS", "1") == "1"
@@ -210,14 +210,16 @@ class LessonParserService:
             return [r or {"relationship": "解析异常", "content_data": "图片理解失败"} for r in results]
 
         try:
-            return asyncio.run(_runner())
-        except RuntimeError:
-            # In case an event loop is already running (rare in sync parser context).
-            loop = asyncio.new_event_loop()
             try:
-                return loop.run_until_complete(_runner())
-            finally:
-                loop.close()
+                loop = asyncio.get_running_loop()
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, _runner())
+                    return future.result()
+            except RuntimeError:
+                return asyncio.run(_runner())
+        except Exception:
+            return [{"relationship": "辅助说明", "content_data": "图片解析失败"} for _ in image_inputs]
 
     def parse_courseware(self, file_url: str, file_type: str) -> Dict[str, Any]:
         """

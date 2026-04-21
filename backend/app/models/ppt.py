@@ -17,7 +17,7 @@ class PPT(Base):
     __tablename__ = "ppts"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="PPT ID")
-    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, comment="所属课程ID")
+    course_id = Column(Integer, ForeignKey("courses_new.id", ondelete="CASCADE"), nullable=False, comment="所属课程ID")
     file_name = Column(String(255), nullable=False, comment="文件名")
     file_path = Column(String(500), comment="文件存储路径")
     file_size = Column(Integer, comment="文件大小(字节)")
@@ -29,7 +29,7 @@ class PPT(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
 
     # 关联关系
-    course = relationship("NewCourse")
+    course = relationship("NewCourse", primaryjoin="PPT.course_id==foreign(NewCourse.id)", viewonly=True)
 
     def __repr__(self):
         return f"<PPT(id={self.id}, file_name={self.file_name})>"

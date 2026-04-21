@@ -5,6 +5,8 @@ from backend.app.api.v1 import chat, student, parser
 from backend.app.api.v1.ws_script import router as ws_router
 from backend.app.api.v1.endpoints import retrieval
 from backend.app.core.logging_config import setup_logging
+from backend.app.models.course import Course, CourseCategory, Lesson
+from backend.app.models.cir import CIRSection
 
 def get_application() -> FastAPI:
     # 初始化日志系统

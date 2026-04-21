@@ -91,3 +91,6 @@ sdist/
 var/
 wheels/
 pip-wheel-metadata/
+
+# 数据库
+qdrant_storage/

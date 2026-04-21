@@ -14,7 +14,7 @@ except ImportError:
 
 class NewCourse(Base):
     """课程表"""
-    __tablename__ = "courses"
+    __tablename__ = "courses_new"
     __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="课程ID")
@@ -41,7 +41,7 @@ class Slide(Base):
     __tablename__ = "slides"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="幻灯片ID")
-    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, comment="所属课程ID")
+    course_id = Column(Integer, ForeignKey("courses_new.id", ondelete="CASCADE"), nullable=False, comment="所属课程ID")
     slide_index = Column(Integer, nullable=False, comment="幻灯片顺序")
     image_url = Column(String(500), comment="图片URL")
     duration = Column(Integer, default=0, comment="显示时长(秒)")
@@ -60,7 +60,7 @@ class CourseDocument(Base):
     __tablename__ = "course_documents"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="文档ID")
-    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, comment="所属课程ID")
+    course_id = Column(Integer, ForeignKey("courses_new.id", ondelete="CASCADE"), nullable=False, comment="所属课程ID")
     title = Column(String(200), nullable=False, comment="文档标题")
     content = Column(Text, comment="文档内容")
     doc_type = Column(String(50), default="text", comment="文档类型")
@@ -79,7 +79,7 @@ class LessonPlan(Base):
     __tablename__ = "lesson_plans"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="教案ID")
-    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, comment="所属课程ID")
+    course_id = Column(Integer, ForeignKey("courses_new.id", ondelete="CASCADE"), nullable=False, comment="所属课程ID")
     content = Column(Text, nullable=False, comment="教案内容(JSON格式)")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
