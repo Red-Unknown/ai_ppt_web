@@ -1,5 +1,6 @@
 import asyncio
 import json
+import subprocess
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -7,15 +8,19 @@ from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from backend.app.core.database import SessionLocal
+from backend.app.core.logging_config import get_logger
 from backend.app.models.cir import CIRSection
 from backend.app.models.course import Lesson
 from backend.app.services.parser.generate_mindmap import generate_mindmap_async
 from backend.app.services.parser.lesson_parser import LessonParserService
 from backend.app.services.script.async_tts_service import async_tts_service
 try:
-    from backend.app.services.script_generator import generate_script_for_node
+    from backend.app.services.script_generator import generate_script_for_node, generate_scripts_for_sections
 except Exception:
     generate_script_for_node = None
+    generate_scripts_for_sections = None
+
+logger = get_logger(__name__)
 
 
 def _extract_content_by_page(json_data: Dict[str, Any]) -> List[str]:
@@ -134,8 +139,10 @@ def _build_cir_rows(parsed_json: Dict[str, Any], lesson_id: str, school_id: str)
     return rows
 
 
-async def _run_qdrant_ingest(raw_json_path: Path, lesson_id: str, school_id: str) -> Tuple[bool, str]:
+def _run_qdrant_ingest_sync(raw_json_path: Path, lesson_id: str, school_id: str) -> Tuple[bool, str]:
     script_path = Path("scripts/indexing/ingest_to_qdrant.py")
+    if not script_path.exists():
+        return False, f"qdrant ingest script not found: {script_path}"
     cmd = [
         sys.executable,
         str(script_path),
@@ -147,19 +154,28 @@ async def _run_qdrant_ingest(raw_json_path: Path, lesson_id: str, school_id: str
         school_id,
         "--rebuild",
     ]
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
     )
-    out, _ = await proc.communicate()
-    text = out.decode("utf-8", errors="ignore")
+    text = f"{proc.stdout or ''}{proc.stderr or ''}"
     return proc.returncode == 0, text
+
+
+async def _run_qdrant_ingest(raw_json_path: Path, lesson_id: str, school_id: str) -> Tuple[bool, str]:
+    return await asyncio.to_thread(_run_qdrant_ingest_sync, raw_json_path, lesson_id, school_id)
 
 
 def _fallback_script_content(node_name: str, teaching_content: str) -> str:
     base = (teaching_content or node_name or "").strip()
     return base if base else "本节内容待补充。"
+
+
+def _derive_output_file(base_path: Path, suffix: str) -> Path:
+    return base_path.with_name(f"{base_path.stem}_{suffix}{base_path.suffix}")
 
 
 async def run_full_pipeline(
@@ -175,7 +191,9 @@ async def run_full_pipeline(
     enable_script_llm: bool = True,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     start = datetime.now(timezone.utc)
-    yield {"type": "status", "step": "start", "message": "开始执行全流程"}
+    start_event = {"type": "status", "step": "start", "message": "开始执行全流程"}
+    logger.info("[full_pipeline] start")
+    yield start_event
 
     parser = LessonParserService()
     parsed = await asyncio.to_thread(parser.parse_courseware, file_path, file_type)
@@ -183,23 +201,33 @@ async def run_full_pipeline(
     payload = _build_raw_json_payload(parsed, final_lesson_id)
     raw_json_path = Path(output_raw_json_path)
     raw_json_path.parent.mkdir(parents=True, exist_ok=True)
+    mind_map_path = _derive_output_file(raw_json_path, "mind_map")
+    scripts_path = _derive_output_file(raw_json_path, "scripts")
     await asyncio.to_thread(
         lambda: raw_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     )
-    yield {
+    parse_event = {
         "type": "status",
         "step": "vl_llm_parse_complete",
         "path": str(raw_json_path),
         "lesson_id": final_lesson_id,
+        "parse_elapsed_seconds": parsed.get("parseElapsedSeconds"),
         "message": "课件解析完成（含图片理解）",
     }
+    logger.info(
+        f"[full_pipeline] vl_llm_parse_complete lesson_id={final_lesson_id} "
+        f"elapsed={parse_event.get('parse_elapsed_seconds')} path={raw_json_path}"
+    )
+    yield parse_event
 
     pages = await asyncio.to_thread(_extract_content_by_page, payload)
     content_text = "\n\n".join(pages)
     txt_path = Path(output_text_path)
     txt_path.parent.mkdir(parents=True, exist_ok=True)
     await asyncio.to_thread(lambda: txt_path.write_text(content_text + ("\n" if content_text else ""), encoding="utf-8-sig"))
-    yield {"type": "status", "step": "content_text", "pages": len(pages), "path": str(txt_path)}
+    content_event = {"type": "status", "step": "content_text", "pages": len(pages), "path": str(txt_path)}
+    logger.info(f"[full_pipeline] content_text pages={len(pages)} path={txt_path}")
+    yield content_event
 
     cir_rows = _build_cir_rows(payload, final_lesson_id, school_id)
 
@@ -248,10 +276,32 @@ async def run_full_pipeline(
 
     def _generate_scripts_in_memory() -> Tuple[Dict[str, str], int]:
         script_map: Dict[str, str] = {}
-        generated = 0
-        for row in cir_rows:
-            if row.get("node_type") != "subchapter":
-                continue
+        subchapter_rows = [row for row in cir_rows if row.get("node_type") == "subchapter"]
+        generated = len(subchapter_rows)
+
+        if generate_scripts_for_sections:
+            lesson_title = title or (payload.get("data", {}).get("fileInfo", {}).get("fileName") or final_lesson_id)
+            sections = [
+                {
+                    "node_name": row.get("node_name") or "",
+                    "teaching_content": row.get("teaching_content") or "",
+                    "page_num": row.get("page_num"),
+                }
+                for row in subchapter_rows
+            ]
+            try:
+                content_map = generate_scripts_for_sections(sections, lesson_title, use_llm=enable_script_llm)
+            except Exception:
+                content_map = {}
+
+            for row in subchapter_rows:
+                node_id = row.get("node_id")
+                node_name = row.get("node_name") or ""
+                teaching_content = row.get("teaching_content") or ""
+                script_map[node_id] = content_map.get(node_name) or _fallback_script_content(node_name, teaching_content)
+            return script_map, generated
+
+        for row in subchapter_rows:
             node_id = row.get("node_id")
             node_name = row.get("node_name") or ""
             teaching_content = row.get("teaching_content") or ""
@@ -265,7 +315,6 @@ async def run_full_pipeline(
             else:
                 content = _fallback_script_content(node_name, teaching_content)
             script_map[node_id] = content
-            generated += 1
         return script_map, generated
 
     parallel_tasks = {
@@ -287,13 +336,71 @@ async def run_full_pipeline(
             result = finished.result()
             if key == "mind_map":
                 mind_map, keywords = result
-                yield {"type": "status", "step": "mind_map", "keywords_count": len(keywords)}
+                mind_map_payload = {
+                    "lesson_id": final_lesson_id,
+                    "keywords": keywords,
+                    "mind_map": mind_map,
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+                await asyncio.to_thread(
+                    lambda: mind_map_path.write_text(
+                        json.dumps(mind_map_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+                    )
+                )
+                mind_map_event = {
+                    "type": "status",
+                    "step": "mind_map",
+                    "keywords_count": len(keywords),
+                    "path": str(mind_map_path),
+                }
+                logger.info(
+                    f"[full_pipeline] mind_map keywords={len(keywords)} path={mind_map_path}"
+                )
+                yield mind_map_event
             elif key == "postgres_cir_base":
                 inserted = int(result)
-                yield {"type": "status", "step": "postgres_cir_base", "inserted_nodes": inserted}
+                postgres_event = {"type": "status", "step": "postgres_cir_base", "inserted_nodes": inserted}
+                logger.info(f"[full_pipeline] postgres_cir_base inserted_nodes={inserted}")
+                yield postgres_event
             elif key == "script":
                 script_map, script_count = result
-                yield {"type": "status", "step": "script", "generated": script_count, "llm": bool(enable_script_llm and generate_script_for_node)}
+                script_rows = []
+                for row in cir_rows:
+                    if row.get("node_type") != "subchapter":
+                        continue
+                    node_id = row.get("node_id")
+                    script_rows.append(
+                        {
+                            "node_id": node_id,
+                            "node_name": row.get("node_name"),
+                            "page_num": row.get("page_num"),
+                            "script_content": script_map.get(node_id, ""),
+                        }
+                    )
+                llm_used = bool(enable_script_llm and (generate_scripts_for_sections or generate_script_for_node))
+                scripts_payload = {
+                    "lesson_id": final_lesson_id,
+                    "script_count": script_count,
+                    "llm_enabled": llm_used,
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "scripts": script_rows,
+                }
+                await asyncio.to_thread(
+                    lambda: scripts_path.write_text(
+                        json.dumps(scripts_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+                    )
+                )
+                script_event = {
+                    "type": "status",
+                    "step": "script",
+                    "generated": script_count,
+                    "llm": llm_used,
+                    "path": str(scripts_path),
+                }
+                logger.info(
+                    f"[full_pipeline] script generated={script_count} llm={llm_used} path={scripts_path}"
+                )
+                yield script_event
             pending.pop(key)
 
     def _apply_parallel_outputs() -> None:
@@ -326,10 +433,13 @@ async def run_full_pipeline(
             text = (node.script_content or node.teaching_content or node.node_name or "")[:800]
             task_id, _ = await async_tts_service.synthesize_async(text=text, voice=voice, client_id=final_lesson_id)
             node.audio_url = f"tts_task://{task_id}" if task_id else None
-            yield {"type": "progress", "step": "tts", "current": idx, "total": total}
+            tts_event = {"type": "progress", "step": "tts", "current": idx, "total": total}
+            logger.info(f"[full_pipeline] tts progress {idx}/{total}")
+            yield tts_event
         db.commit()
     finally:
         db.close()
+    logger.info("[full_pipeline] tts_done")
     yield {"type": "status", "step": "tts_done"}
 
     def _finish_lesson() -> None:
@@ -359,6 +469,10 @@ async def run_full_pipeline(
                 db.close()
 
         await asyncio.to_thread(_mark_failed)
-    yield {"type": "status", "step": "qdrant", "ok": ok, "log": qdrant_log[-2000:]}
+    qdrant_event = {"type": "status", "step": "qdrant", "ok": ok, "log": qdrant_log[-2000:]}
+    logger.info(f"[full_pipeline] qdrant ok={ok}")
+    yield qdrant_event
     elapsed_s = (datetime.now(timezone.utc) - start).total_seconds()
-    yield {"type": "done", "step": "end", "lesson_id": final_lesson_id, "elapsed_seconds": round(elapsed_s, 3)}
+    done_event = {"type": "done", "step": "end", "lesson_id": final_lesson_id, "elapsed_seconds": round(elapsed_s, 3)}
+    logger.info(f"[full_pipeline] done lesson_id={final_lesson_id} elapsed_seconds={done_event['elapsed_seconds']}")
+    yield done_event

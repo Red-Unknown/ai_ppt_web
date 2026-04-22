@@ -29,7 +29,7 @@ class PPT(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
 
     # 关联关系
-    course = relationship("Course")
+    course = relationship("NewCourse")
 
     def __repr__(self):
         return f"<PPT(id={self.id}, file_name={self.file_name})>"

@@ -23,7 +23,7 @@ class Subject(Base):
 
     # 关联关系
     chapters = relationship("Chapter", back_populates="subject", cascade="all, delete-orphan")
-    courses = relationship("Course", back_populates="subject")
+    courses = relationship("NewCourse", back_populates="subject")
 
     def __repr__(self):
         return f"<Subject(id={self.id}, name={self.name})>"
@@ -42,7 +42,7 @@ class Chapter(Base):
 
     # 关联关系
     subject = relationship("Subject", back_populates="chapters")
-    courses = relationship("Course", back_populates="chapter")
+    courses = relationship("NewCourse", back_populates="chapter")
 
     def __repr__(self):
         return f"<Chapter(id={self.id}, name={self.name}, subject_id={self.subject_id})>"

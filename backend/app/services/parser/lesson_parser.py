@@ -36,21 +36,21 @@ class LessonParserService:
     ):
         self.vision_api_key = (
             vision_api_key
-            or os.getenv("IMAGE_VLM_API_KEY")
-            or os.getenv("QWEN_API_KEY")
+            or settings.EFFECTIVE_IMAGE_VLM_API_KEY
+            or settings.EFFECTIVE_QWEN_API_KEY
             or os.getenv("OPENAI_API_KEY")
             or ""
         )
         self.vision_base_url = (
             vision_base_url
-            or os.getenv("IMAGE_VLM_BASE_URL")
-            or os.getenv("QWEN_BASE_URL")
+            or settings.EFFECTIVE_IMAGE_VLM_BASE_URL
+            or settings.EFFECTIVE_QWEN_BASE_URL
             or "https://dashscope.aliyuncs.com/compatible-mode/v1"
         )
         self.vision_model = (
             vision_model
-            or os.getenv("IMAGE_VLM_MODEL")
-            or os.getenv("QWEN_VISION_MODEL")
+            or settings.EFFECTIVE_IMAGE_VLM_MODEL
+            or settings.QWEN_VISION_MODEL
             or "qwen-vl-plus"
         )
         self.image_parse_concurrency = int(os.getenv("IMAGE_PARSE_CONCURRENCY", "8"))
@@ -178,10 +178,14 @@ class LessonParserService:
             print(f"[计时] llm_pool建立耗时: {pool_elapsed:.3f}s")
 
         async def _runner() -> List[Dict[str, str]]:
+            first_parse_started_ts: Optional[float] = None
             sem = asyncio.Semaphore(max(1, self.image_parse_concurrency))
-            async def _run_one(idx: int, blob: bytes, ext: str) -> Tuple[int, Dict[str, str], float]:
-                parsed, elapsed = await self._describe_one_image_async(blob, ext, sem)
-                return idx, parsed, elapsed
+            async def _run_one(idx: int, blob: bytes, ext: str) -> Tuple[int, Dict[str, str]]:
+                nonlocal first_parse_started_ts
+                if first_parse_started_ts is None:
+                    first_parse_started_ts = time.perf_counter()
+                parsed, _ = await self._describe_one_image_async(blob, ext, sem)
+                return idx, parsed
 
             tasks = [
                 asyncio.create_task(_run_one(idx, blob, ext))
@@ -190,17 +194,17 @@ class LessonParserService:
             total = len(tasks)
             done = 0
             results: List[Optional[Dict[str, str]]] = [None] * total
-            llm_elapsed_total = 0.0
             for task in asyncio.as_completed(tasks):
-                idx, res, elapsed = await task
+                idx, res = await task
                 results[idx] = res
-                llm_elapsed_total += elapsed
                 done += 1
                 self._print_progress("图片解析", done, total)
             if self.progress_enabled and total > 0:
+                batch_end_ts = time.perf_counter()
+                batch_elapsed = batch_end_ts - (first_parse_started_ts or batch_end_ts)
                 print(
-                    f"[计时] llm生成耗时: 总计 {llm_elapsed_total:.3f}s, "
-                    f"单图均值 {llm_elapsed_total/total:.3f}s, 图片数 {total}"
+                    f"[计时] llm生成耗时: 批次总耗时 {batch_elapsed:.3f}s, "
+                    f"单图折算 {batch_elapsed/total:.3f}s, 图片数 {total}"
                 )
             return [r or {"relationship": "解析异常", "content_data": "图片理解失败"} for r in results]
 
@@ -238,6 +242,8 @@ class LessonParserService:
             else:
                 raise ValueError(f"Unsupported file type: {file_type}")
             parse_result["parseElapsedSeconds"] = round(time.perf_counter() - start_ts, 3)
+            if self.progress_enabled:
+                print(f"[计时] 解析总耗时: {parse_result['parseElapsedSeconds']:.3f}s")
             return parse_result
         finally:
             # Cleanup temp file

@@ -14,25 +14,23 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 from dotenv import load_dotenv
-load_dotenv(project_root / ".env")
+load_dotenv(project_root / ".env", override=True)
 
-from backend.app.utils.llm_pool import initialize_pool, LLMPoolContext
-from langchain_core.messages import HumanMessage, SystemMessage
-
-
-SCRIPT_PROMPT_TEMPLATE = """请根据以下课程内容，为每个章节生成口语化的课堂讲稿。
+SCRIPT_PROMPT_TEMPLATE = """请根据以下课程内容，为每个PPT小节生成口语化的课堂讲稿。
 
 要求：
 1. 口语化表达，适合课堂讲授
 2. 适当添加互动环节
 3. 保持学术内容的准确性
+4. 只允许在第一条script_content出现一次开场白（如“同学们好”），中间所有条目严禁重复开场白
+5. 只允许在最后一条script_content出现一次总结收束语，前面条目不要写结束语
 4. 输出JSON数组，每个元素包含 "node_name" 和 "script_content" 字段
 
 课程内容：
 {content}
 
 输出示例：
-[{"node_name": "1.1 什么是人工智能", "script_content": "同学们好..."}]
+[{"node_name": "1.1 什么是人工智能", "script_content": "今天我们先从..."}]
 """
 
 
@@ -49,7 +47,10 @@ def log_print(*args, **kwargs):
 def call_llm(prompt: str) -> str:
     """使用LLM连接池调用模型"""
     try:
-        with LLMPoolContext(model="qwen") as client:
+        from backend.app.utils.llm_pool import LLMPoolContext
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        with LLMPoolContext(model="deepseek") as client:
             messages = [
                 SystemMessage(content="你是一位经验丰富的教师，擅长将学术内容转化为生动有趣的课堂讲稿。"),
                 HumanMessage(content=prompt)
@@ -61,6 +62,31 @@ def call_llm(prompt: str) -> str:
         raise
 
 
+def generate_script_for_node(node, use_llm: bool = True) -> str:
+    """
+    Generate script text for a single CIR node.
+    Compatible with parser.full_pipeline expectations.
+    """
+    node_name = (getattr(node, "node_name", "") or "").strip()
+    teaching_content = (getattr(node, "teaching_content", "") or "").strip()
+    fallback = teaching_content or node_name or "本节内容待补充。"
+    if not use_llm:
+        return fallback
+
+    prompt = (
+        "你是一位高校课堂讲解老师。请基于下面内容生成一段可直接口播的讲稿，"
+        "语言自然、条理清晰、长度控制在120-260字。\n\n"
+        f"小节标题：{node_name or '未命名小节'}\n"
+        f"教学内容：{teaching_content or '无'}\n\n"
+        "只输出讲稿正文，不要输出标题或额外说明。"
+    )
+    try:
+        text = (call_llm(prompt) or "").strip()
+        return text if text else fallback
+    except Exception:
+        return fallback
+
+
 def generate_prompt_for_all_sections(sections: list, lesson_name: str) -> str:
     """一次性生成所有章节的提示词"""
     content_parts = []
@@ -69,14 +95,47 @@ def generate_prompt_for_all_sections(sections: list, lesson_name: str) -> str:
 
     for i, section in enumerate(sections):
         node_name = section.get('node_name', '')
+        page_num = section.get("page_num")
         teaching_content = section.get('teaching_content', '') if section.get('teaching_content') else ''
-        content_parts.append(f"\n章节{i+1}: {node_name}")
+        page_label = f"第{page_num}页" if page_num is not None else "页码未知"
+        content_parts.append(f"\nPPT{i+1}（{page_label}）: {node_name}")
         if teaching_content:
             content_parts.append(f"内容: {teaching_content}")
 
     content = "\n".join(content_parts)
     prompt = SCRIPT_PROMPT_TEMPLATE.replace("{content}", content)
     return prompt
+
+
+def generate_scripts_for_sections(sections: list, lesson_name: str, use_llm: bool = True) -> dict:
+    """
+    批量生成讲稿，返回 {node_name: script_content} 映射。
+    """
+    scripts_map = {}
+    if not sections:
+        return scripts_map
+
+    if not use_llm:
+        for section in sections:
+            node_name = section.get("node_name", "")
+            teaching_content = section.get("teaching_content", "")
+            if node_name:
+                scripts_map[node_name] = (teaching_content or node_name or "本节内容待补充。").strip()
+        return scripts_map
+
+    prompt = generate_prompt_for_all_sections(sections, lesson_name)
+    llm_response = call_llm(prompt)
+    json_match = re.search(r'\[.*\]', llm_response, re.DOTALL)
+    if not json_match:
+        raise ValueError("LLM响应中未找到JSON数组")
+
+    scripts_data = json.loads(json_match.group())
+    for item in scripts_data:
+        node_name = item.get("node_name", "")
+        script_content = item.get("script_content", "")
+        if node_name and script_content:
+            scripts_map[node_name] = script_content
+    return scripts_map
 
 
 def process_lesson_json(input_file: str, output_file: str):
@@ -105,43 +164,21 @@ def process_lesson_json(input_file: str, output_file: str):
         save_result(lesson_data, output_file)
         return output_file
 
-    # 一次性生成所有章节的提示词
-    prompt = generate_prompt_for_all_sections(target_sections, lesson_name)
-    log_print(f"提示词长度: {len(prompt)} 字符")
-
     try:
-        # 调用一次LLM生成所有讲稿
-        llm_response = call_llm(prompt)
-        log_print(f"LLM响应长度: {len(llm_response)} 字符")
+        prompt = generate_prompt_for_all_sections(target_sections, lesson_name)
+        log_print(f"提示词长度: {len(prompt)} 字符")
+        scripts_map = generate_scripts_for_sections(target_sections, lesson_name, use_llm=True)
+        log_print(f"解析到 {len(scripts_map)} 个讲稿")
 
-        # 解析JSON响应
-        json_match = re.search(r'\[.*\]', llm_response, re.DOTALL)
-        if json_match:
-            try:
-                scripts_data = json.loads(json_match.group())
-                log_print(f"解析到 {len(scripts_data)} 个讲稿")
+        # 填充讲稿到原始sections中
+        filled_count = 0
+        for section in sections:
+            node_name = section.get('node_name', '')
+            if node_name in scripts_map:
+                section['script_content'] = scripts_map[node_name]
+                filled_count += 1
 
-                # 创建node_name到script_content的映射
-                scripts_map = {}
-                for item in scripts_data:
-                    node_name = item.get('node_name', '')
-                    script_content = item.get('script_content', '')
-                    if node_name and script_content:
-                        scripts_map[node_name] = script_content
-
-                # 填充讲稿到原始sections中
-                filled_count = 0
-                for section in sections:
-                    node_name = section.get('node_name', '')
-                    if node_name in scripts_map:
-                        section['script_content'] = scripts_map[node_name]
-                        filled_count += 1
-
-                log_print(f"成功填充: {filled_count}/{len(target_sections)} 个章节")
-            except json.JSONDecodeError as e:
-                log_print(f"JSON解析错误: {e}")
-        else:
-            log_print("未找到JSON格式的响应")
+        log_print(f"成功填充: {filled_count}/{len(target_sections)} 个章节")
     except Exception as e:
         log_print(f"生成讲稿时出错: {e}")
 
@@ -168,6 +205,7 @@ if __name__ == "__main__":
 
     # 初始化LLM连接池
     log_print("初始化LLM连接池...")
+    from backend.app.utils.llm_pool import initialize_pool
     initialize_pool()
 
     if args.input:

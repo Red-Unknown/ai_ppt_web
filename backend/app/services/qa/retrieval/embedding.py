@@ -11,7 +11,7 @@ class SimpleEmbedder:
     def __init__(self, api_key: str = None, base_url: str = None):
         self.api_key = api_key
         self.base_url = base_url
-        self.embedding_url = os.getenv("EMBEDDING_SERVICE_URL", "http://localhost:8000/embedding")
+        self.embedding_url = os.getenv("EMBEDDING_SERVICE_URL", "http://10.0.0.3:8000/embedding")
 
     def embed_query(self, text: str) -> List[float]:
         try:

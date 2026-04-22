@@ -123,20 +123,20 @@ class LLMPool:
                     "base_url": None,
                 }
 
-        if settings.QWEN_API_KEY:
+        if settings.EFFECTIVE_QWEN_API_KEY:
             self._scenario_configs["qwen"] = {
                 "model": settings.QWEN_MODEL,
                 "temperature": settings.QWEN_TEMPERATURE,
                 "max_tokens": settings.QWEN_MAX_TOKENS,
-                "api_key": settings.QWEN_API_KEY,
-                "base_url": settings.QWEN_BASE_URL,
+                "api_key": settings.EFFECTIVE_QWEN_API_KEY,
+                "base_url": settings.EFFECTIVE_QWEN_BASE_URL,
             }
             self._scenario_configs["qwen_vision"] = {
                 "model": settings.QWEN_VISION_MODEL,
                 "temperature": settings.QWEN_TEMPERATURE,
                 "max_tokens": settings.QWEN_MAX_TOKENS,
-                "api_key": settings.QWEN_API_KEY,
-                "base_url": settings.QWEN_BASE_URL,
+                "api_key": settings.EFFECTIVE_QWEN_API_KEY,
+                "base_url": settings.EFFECTIVE_QWEN_BASE_URL,
                 "vision": True,
             }
             for scenario in ["qa", "reasoner", "summary", "translation"]:
@@ -144,15 +144,15 @@ class LLMPool:
                     "model": settings.QWEN_MODEL,
                     "temperature": self._scenario_configs[scenario]["temperature"],
                     "max_tokens": settings.QWEN_MAX_TOKENS,
-                    "api_key": settings.QWEN_API_KEY,
-                    "base_url": settings.QWEN_BASE_URL,
+                    "api_key": settings.EFFECTIVE_QWEN_API_KEY,
+                    "base_url": settings.EFFECTIVE_QWEN_BASE_URL,
                 }
                 self._scenario_configs[f"{scenario}_qwen_vision"] = {
                     "model": settings.QWEN_VISION_MODEL,
                     "temperature": self._scenario_configs[scenario]["temperature"],
                     "max_tokens": settings.QWEN_MAX_TOKENS,
-                    "api_key": settings.QWEN_API_KEY,
-                    "base_url": settings.QWEN_BASE_URL,
+                    "api_key": settings.EFFECTIVE_QWEN_API_KEY,
+                    "base_url": settings.EFFECTIVE_QWEN_BASE_URL,
                     "vision": True,
                 }
 
